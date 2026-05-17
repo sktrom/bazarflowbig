@@ -1,0 +1,210 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Supermarket.Application.CartFinalization.Interfaces;
+using Supermarket.Application.Common.Interfaces;
+using Supermarket.Application.WorkingCart.Interfaces;
+using Supermarket.Contracts.CartFinalization;
+using Supermarket.Contracts.WorkingCart;
+using Supermarket.Domain.Entities;
+using Supermarket.Domain.Enums;
+
+namespace Supermarket.Application.CartFinalization.Services
+{
+    public class CartFinalizationService : ICartFinalizationService
+    {
+        private readonly ICartFinalizationRepository _finalizationRepo;
+        private readonly IInventoryAllocationRepository _inventoryRepo;
+        private readonly IAppSettingsRepository _settingsRepo;
+        private readonly ICartManagementRepository _cartRepo;
+        private readonly ISessionContext _sessionContext;
+
+        public CartFinalizationService(
+            ICartFinalizationRepository finalizationRepo,
+            IInventoryAllocationRepository inventoryRepo,
+            IAppSettingsRepository settingsRepo,
+            ICartManagementRepository cartRepo,
+            ISessionContext sessionContext)
+        {
+            _finalizationRepo = finalizationRepo;
+            _inventoryRepo = inventoryRepo;
+            _settingsRepo = settingsRepo;
+            _cartRepo = cartRepo;
+            _sessionContext = sessionContext;
+        }
+
+        public async Task<CartResponse> SuspendAsync(SuspendCartRequest request)
+        {
+            var employeeId = _sessionContext.EmployeeId;
+
+            if (!Enum.TryParse<InvoiceSuspensionReason>(request.SuspensionReason, out var reason))
+                throw new InvalidOperationException("INVALID_SUSPENSION_REASON");
+
+            var invoice = await _finalizationRepo.GetWorkingInvoiceByEmployeeAsync(employeeId);
+            if (invoice == null) throw new InvalidOperationException("NO_WORKING_CART_EXISTS");
+
+            if ((reason == InvoiceSuspensionReason.Financial || reason == InvoiceSuspensionReason.Both)
+                && string.IsNullOrWhiteSpace(invoice.CustomerName))
+                throw new InvalidOperationException("CUSTOMER_NAME_REQUIRED");
+
+            // Reserve inventory (FEFO handled in repo)
+            await ReserveInventoryAsync(invoice.Id);
+
+            invoice.Status = InvoiceStatus.Suspended;
+            invoice.SuspensionReason = reason;
+            await _finalizationRepo.UpdateInvoiceAsync(invoice);
+            await _finalizationRepo.SaveChangesAsync();
+
+            return MapToCartResponse(invoice);
+        }
+
+        public async Task<CartResponse> CompleteAsync()
+        {
+            var employeeId = _sessionContext.EmployeeId;
+
+            var invoice = await _finalizationRepo.GetWorkingInvoiceByEmployeeAsync(employeeId);
+            if (invoice == null) throw new InvalidOperationException("NO_WORKING_CART_EXISTS");
+
+            // Read exchange rate - fails loudly if not configured
+            var rate = await _settingsRepo.GetRequiredDecimalAsync("exchange_rate_syp");
+
+            // Snapshot exchange rate and compute SYP total
+            invoice.ExchangeRateSypSnapshot = rate;
+            invoice.TotalSyp = invoice.TotalUsd * rate;
+
+            // Consume inventory (FEFO handled in repo)
+            await ConsumeInventoryAsync(invoice.Id);
+
+            invoice.Status = InvoiceStatus.Completed;
+            invoice.CompletedAt = DateTime.UtcNow;
+            await _finalizationRepo.UpdateInvoiceAsync(invoice);
+            await _finalizationRepo.SaveChangesAsync();
+
+            return MapToCartResponse(invoice);
+        }
+
+        public async Task<CartResponse> CancelCurrentAsync()
+        {
+            var employeeId = _sessionContext.EmployeeId;
+
+            var invoice = await _finalizationRepo.GetWorkingInvoiceByEmployeeAsync(employeeId);
+            if (invoice == null) throw new InvalidOperationException("NO_WORKING_CART_EXISTS");
+
+            // Release any reserved allocations first
+            await ReleaseInventoryAsync(invoice.Id);
+
+            // Physical delete inside same unit-of-work (SaveChanges called by repo)
+            await _finalizationRepo.DeleteInvoiceWithLinesAsync(invoice.Id);
+
+            return new CartResponse(); // Empty model
+        }
+
+        public async Task<CartResponse> LoadSuspendedAsync(long invoiceId)
+        {
+            var employeeId = _sessionContext.EmployeeId;
+
+            var invoice = await _finalizationRepo.GetSuspendedInvoiceByIdAsync(invoiceId);
+            if (invoice == null) throw new InvalidOperationException("INVOICE_NOT_FOUND");
+            if (invoice.Status != InvoiceStatus.Suspended) throw new InvalidOperationException("INVOICE_NOT_SUSPENDED");
+
+            // Block if current cashier already has a non-empty Working cart
+            var hasNonEmptyCart = await _finalizationRepo.EmployeeHasNonEmptyWorkingCartAsync(employeeId);
+            if (hasNonEmptyCart) throw new InvalidOperationException("WORKING_CART_NOT_EMPTY");
+
+            invoice.Status = InvoiceStatus.Working;
+            invoice.SuspensionReason = null;
+            await _finalizationRepo.UpdateInvoiceAsync(invoice);
+            await _finalizationRepo.SaveChangesAsync();
+
+            return MapToCartResponse(invoice);
+        }
+
+        // ─── Private Inventory Helpers ────────────────────────────────────────────
+
+        private async Task ReserveInventoryAsync(long invoiceId)
+        {
+            var lines = await _cartRepo.GetCartLinesAsync(invoiceId);
+            foreach (var line in lines)
+            {
+                var remaining = line.Quantity;
+                var batches = await _inventoryRepo.GetAvailableBatchesFEFOAsync(line.ProductId);
+
+                foreach (var batch in batches)
+                {
+                    if (remaining <= 0) break;
+                    var take = Math.Min(batch.QuantityAvailable, remaining);
+
+                    var allocation = new InvoiceLineBatchAllocation
+                    {
+                        InvoiceLineId = line.Id,
+                        BatchId = batch.Id,
+                        Quantity = take,
+                        AllocationStatus = AllocationStatus.Reserved
+                    };
+                    await _inventoryRepo.AddAllocationAsync(allocation);
+
+                    // Reduce available on batch
+                    batch.QuantityAvailable -= take;
+                    await _inventoryRepo.UpdateBatchAsync(batch);
+
+                    remaining -= take;
+                }
+
+                if (remaining > 0)
+                    throw new InvalidOperationException("INSUFFICIENT_INVENTORY");
+            }
+
+            await _inventoryRepo.SaveChangesAsync();
+        }
+
+        private async Task ConsumeInventoryAsync(long invoiceId)
+        {
+            var allocations = await _inventoryRepo.GetReservedByInvoiceAsync(invoiceId);
+            foreach (var alloc in allocations)
+            {
+                alloc.AllocationStatus = AllocationStatus.Consumed;
+                await _inventoryRepo.UpdateAllocationAsync(alloc);
+                // QuantityAvailable was already decremented at Reserve time; no further batch change needed.
+            }
+
+            await _inventoryRepo.SaveChangesAsync();
+        }
+
+        private async Task ReleaseInventoryAsync(long invoiceId)
+        {
+            var allocations = await _inventoryRepo.GetReservedByInvoiceAsync(invoiceId);
+            foreach (var alloc in allocations)
+            {
+                // Restore batch quantity
+                if (alloc.Batch != null)
+                {
+                    alloc.Batch.QuantityAvailable += alloc.Quantity;
+                    await _inventoryRepo.UpdateBatchAsync(alloc.Batch);
+                }
+
+                alloc.AllocationStatus = AllocationStatus.Released;
+                await _inventoryRepo.UpdateAllocationAsync(alloc);
+            }
+
+            await _inventoryRepo.SaveChangesAsync();
+        }
+
+        // ─── Mapping ──────────────────────────────────────────────────────────────
+
+        private static CartResponse MapToCartResponse(Invoice invoice)
+        {
+            return new CartResponse
+            {
+                InvoiceId = invoice.Id,
+                Status = invoice.Status.ToString(),
+                CustomerName = invoice.CustomerName,
+                InvoiceDiscountType = invoice.InvoiceDiscountType?.ToString(),
+                InvoiceDiscountValue = invoice.InvoiceDiscountValue,
+                SubtotalUsd = invoice.SubtotalUsd,
+                TotalUsd = invoice.TotalUsd,
+                Lines = new System.Collections.Generic.List<CartLineDto>()
+            };
+        }
+    }
+}

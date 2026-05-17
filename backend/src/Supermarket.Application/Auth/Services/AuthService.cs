@@ -1,0 +1,134 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Supermarket.Application.Auth.Interfaces;
+using Supermarket.Application.Common.Interfaces;
+using Supermarket.Contracts.Auth;
+using Supermarket.Domain.Entities;
+using Supermarket.Domain.Enums;
+
+namespace Supermarket.Application.Auth.Services
+{
+    public class AuthService : IAuthService
+    {
+        private readonly IEmployeeRepository _employeeRepo;
+        private readonly IDeviceRepository _deviceRepo;
+        private readonly IAuthSessionRepository _sessionRepo;
+        private readonly IEmployeeScreenPermissionRepository _permRepo;
+        private readonly IPasswordHasher _passwordHasher;
+        private readonly ISessionContextAccessor _contextAccessor;
+
+        public AuthService(
+            IEmployeeRepository employeeRepo,
+            IDeviceRepository deviceRepo,
+            IAuthSessionRepository sessionRepo,
+            IEmployeeScreenPermissionRepository permRepo,
+            IPasswordHasher passwordHasher,
+            ISessionContextAccessor contextAccessor)
+        {
+            _employeeRepo    = employeeRepo;
+            _deviceRepo      = deviceRepo;
+            _sessionRepo     = sessionRepo;
+            _permRepo        = permRepo;
+            _passwordHasher  = passwordHasher;
+            _contextAccessor = contextAccessor;
+        }
+
+        public async Task<LoginResponse> LoginAsync(LoginRequest request)
+        {
+            var employee = await _employeeRepo.GetByUsernameAsync(request.Username);
+            if (employee == null)
+                throw new InvalidOperationException("EMPLOYEE_NOT_FOUND");
+
+            if (!employee.IsActive)
+                throw new InvalidOperationException("EMPLOYEE_INACTIVE");
+
+            if (!_passwordHasher.Verify(request.Password, employee.PasswordHash))
+                throw new InvalidOperationException("INVALID_CREDENTIALS");
+
+            var device = await _deviceRepo.GetByCodeAsync(request.DeviceCode);
+            if (device == null)
+                throw new InvalidOperationException("DEVICE_NOT_FOUND");
+
+            if (!device.IsActive)
+                throw new InvalidOperationException("DEVICE_INACTIVE");
+
+            var existingActive = await _sessionRepo.GetActiveByEmployeeIdAsync(employee.Id);
+            if (existingActive != null)
+                throw new InvalidOperationException("EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION");
+
+            var newSession = new CashSession
+            {
+                EmployeeId = employee.Id,
+                DeviceId   = device.Id,
+                StartedAt  = DateTime.UtcNow,
+                Status     = CashSessionStatus.Active
+            };
+
+            try
+            {
+                await _sessionRepo.CreateAsync(newSession);
+            }
+            catch
+            {
+                throw new InvalidOperationException("SESSION_START_FAILED");
+            }
+
+            var allowedKeys = await _permRepo.GetAllowedScreenKeysAsync(employee.Id);
+
+            return new LoginResponse
+            {
+                EmployeeId      = employee.Id,
+                FullName        = employee.FullName,
+                SessionId       = newSession.Id,
+                DeviceCode      = device.DeviceCode,
+                AllowedScreenKeys = new List<string>(allowedKeys)
+            };
+        }
+
+        public async Task<LogoutResponse> LogoutAsync(long sessionId)
+        {
+            var session = await _sessionRepo.GetActiveByIdAsync(sessionId);
+            if (session == null)
+                throw new InvalidOperationException("NO_ACTIVE_SESSION");
+
+            // Stub: cart check will be wired in cart module
+            // if (await _cartService.HasActiveCartAsync(session.Id))
+            //     throw new InvalidOperationException("LOGOUT_BLOCKED_CART_NOT_EMPTY");
+
+            await _sessionRepo.CloseAsync(session.Id, DateTime.UtcNow);
+
+            return new LogoutResponse { Success = true, Message = "Logout successful" };
+        }
+
+        public async Task<CurrentEmployeeResponse> GetCurrentEmployeeAsync(long sessionId)
+        {
+            var session = await _sessionRepo.GetActiveByIdAsync(sessionId);
+            if (session == null)
+                throw new InvalidOperationException("NO_ACTIVE_SESSION");
+
+            var employee = await _employeeRepo.GetByIdAsync(session.EmployeeId);
+            var device   = await _deviceRepo.GetByIdAsync(session.DeviceId);
+
+            return new CurrentEmployeeResponse
+            {
+                EmployeeId      = session.EmployeeId,
+                FullName        = employee?.FullName ?? string.Empty,
+                Username        = employee?.Username ?? string.Empty,
+                SessionId       = session.Id,
+                DeviceCode      = device?.DeviceCode ?? string.Empty,
+                SessionStartedAt = session.StartedAt
+            };
+        }
+
+        public async Task<EmployeePermissionsResponse> GetPermissionsAsync(long employeeId)
+        {
+            var allowedKeys = await _permRepo.GetAllowedScreenKeysAsync(employeeId);
+            return new EmployeePermissionsResponse
+            {
+                EmployeeId       = employeeId,
+                AllowedScreenKeys = new List<string>(allowedKeys)
+            };
+        }
+    }
+}

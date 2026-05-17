@@ -1,0 +1,90 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Supermarket.Application.InventoryQueries.Interfaces;
+using Supermarket.Domain.Entities;
+using Supermarket.Infrastructure.Persistence;
+
+namespace Supermarket.Infrastructure.Repositories
+{
+    public class InventoryQueryRepository : IInventoryQueryRepository
+    {
+        private readonly SupermarketDbContext _context;
+
+        public InventoryQueryRepository(SupermarketDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<(List<(Product Product, decimal TotalQuantityAvailable, int BatchCount, DateTime? NearestExpiryDate)> Items, int TotalCount)> GetInventoryPaginatedAsync(
+            string? search, long? categoryId, bool? isActive, bool? hasStock, bool? hasExpiry, int page, int pageSize)
+        {
+            var query = _context.Products.Include(p => p.Category).AsNoTracking().AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.ToLower();
+                query = query.Where(p => p.Name.ToLower().Contains(s) || p.Barcode.Contains(s));
+            }
+
+            if (categoryId.HasValue)
+                query = query.Where(p => p.CategoryId == categoryId.Value);
+
+            if (isActive.HasValue)
+                query = query.Where(p => p.IsActive == isActive.Value);
+
+            if (hasExpiry.HasValue)
+                query = query.Where(p => p.HasExpiry == hasExpiry.Value);
+
+            // Create the projection
+            var projectedQuery = query.Select(p => new
+            {
+                Product = p,
+                TotalQty = _context.ProductBatches.Where(b => b.ProductId == p.Id).Sum(b => (decimal?)b.QuantityAvailable) ?? 0m,
+                BatchCount = _context.ProductBatches.Count(b => b.ProductId == p.Id && b.QuantityAvailable > 0),
+                NearestExpiry = _context.ProductBatches.Where(b => b.ProductId == p.Id && b.QuantityAvailable > 0 && b.ExpiryDate != null).Min(b => b.ExpiryDate)
+            });
+
+            if (hasStock.HasValue)
+            {
+                if (hasStock.Value)
+                    projectedQuery = projectedQuery.Where(p => p.TotalQty > 0);
+                else
+                    projectedQuery = projectedQuery.Where(p => p.TotalQty == 0);
+            }
+
+            var totalCount = await projectedQuery.CountAsync();
+
+            var rawItems = await projectedQuery
+                .OrderBy(p => p.Product.Name)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var items = rawItems.Select(p => (p.Product, p.TotalQty, p.BatchCount, p.NearestExpiry)).ToList();
+
+            return (items, totalCount);
+        }
+
+        public async Task<Product?> GetProductByIdAsync(long productId)
+        {
+            return await _context.Products
+                .Include(p => p.Category)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id == productId);
+        }
+
+        public async Task<List<ProductBatch>> GetProductBatchesAsync(long productId)
+        {
+            // FEFO ordering: nearest ExpiryDate first, nulls last
+            return await _context.ProductBatches
+                .Where(b => b.ProductId == productId)
+                .OrderByDescending(b => b.ExpiryDate.HasValue) // true first, false last. In C#, false is 0, true is 1. So OrderByDescending puts true (has value) first
+                .ThenBy(b => b.ExpiryDate) // nearest expiry first
+                .AsNoTracking()
+                .ToListAsync();
+        }
+    }
+}
