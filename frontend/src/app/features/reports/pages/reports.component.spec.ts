@@ -54,7 +54,7 @@ describe('ReportsComponent', () => {
     component.filters.dateFrom = '2023-01-01';
     component.refreshData(); // explicit refresh
     
-    expect(apiSpy.getSalesInvoices).toHaveBeenCalledWith('2023-01-01', null, null);
+    expect(apiSpy.getSalesInvoices).toHaveBeenCalledWith('2023-01-01', null as any, null as any);
   });
 
   it('should handle API errors gracefully', () => {
@@ -75,11 +75,12 @@ describe('ReportsComponent', () => {
     fixture.detectChanges(); // load sales
     
     // Fake a chart instance
-    component.chartInstance = { destroy: jasmine.createSpy('destroy') } as any;
+    const destroySpy = jasmine.createSpy('destroy');
+    component.chartInstance = { destroy: destroySpy } as any;
 
     component.switchTab('Expiry');
     
-    expect(component.chartInstance?.destroy).toHaveBeenCalled();
+    expect(destroySpy).toHaveBeenCalled();
     expect(component.activeTab).toBe('Expiry');
     expect(apiSpy.getExpirySummary).toHaveBeenCalled();
   });
