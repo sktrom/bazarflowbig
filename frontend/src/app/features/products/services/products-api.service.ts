@@ -52,12 +52,12 @@ export interface UpdateProductRequest extends CreateProductRequest {
 export interface BatchItem {
   id: number;
   productId: number;
-  quantityOriginal: number;
-  quantityRemaining: number;
-  unitCostUsd: number;
+  quantityReceived: number;
+  quantityAvailable: number;
+  entryDate?: string | null;
   expiryDate?: string | null;
-  createdAt: string;
-  isDepleted: boolean;
+  entryInvoiceNumber?: string | null;
+  enteredByEmployeeId: number;
 }
 
 export interface BatchListResponse {
@@ -65,9 +65,11 @@ export interface BatchListResponse {
 }
 
 export interface CreateBatchRequest {
-  quantity: number;
-  unitCostUsd: number;
+  quantityReceived: number;
+  quantityAvailable: number;
+  entryDate?: string | null;
   expiryDate?: string | null;
+  entryInvoiceNumber?: string | null;
 }
 
 export interface CategoryItem {

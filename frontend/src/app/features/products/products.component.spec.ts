@@ -26,7 +26,7 @@ describe('ProductsComponent & ProductsState', () => {
 
   const mockBatches: BatchListResponse = {
     items: [
-      { id: 101, productId: 1, quantityOriginal: 10, quantityRemaining: 10, unitCostUsd: 5, expiryDate: '2025-12-31', createdAt: '', isDepleted: false }
+      { id: 101, productId: 1, quantityReceived: 10, quantityAvailable: 10, entryDate: '2026-05-18T00:00:00Z', expiryDate: '2025-12-31', entryInvoiceNumber: 'TEST-001', enteredByEmployeeId: 1 }
     ]
   };
 
@@ -117,7 +117,7 @@ describe('ProductsComponent & ProductsState', () => {
     component.detailsData = mockDetails; 
     component.openAddBatchModal();
     
-    component.batchForm = { quantity: 10, unitCostUsd: 5, expiryDate: null };
+    component.batchForm = { quantityReceived: 10, entryInvoiceNumber: null, expiryDate: null };
     expect(component.isValidBatchForm()).toBeFalse(); // Invalid without expiry
     
     component.batchForm.expiryDate = '2025-01-01';
@@ -129,17 +129,18 @@ describe('ProductsComponent & ProductsState', () => {
     component.detailsData = { ...mockDetails, hasExpiry: false };
     component.openAddBatchModal();
     
-    component.batchForm = { quantity: 10, unitCostUsd: 5, expiryDate: '2025-01-01' }; // user somehow entered it
+    component.batchForm = { quantityReceived: 10, entryInvoiceNumber: null, expiryDate: '2025-01-01' }; // user somehow entered it
     
-    const mockBatchItem: BatchItem = { id: 1, productId: 1, quantityOriginal: 10, quantityRemaining: 10, unitCostUsd: 5, createdAt: '', isDepleted: false };
+    const mockBatchItem: BatchItem = { id: 1, productId: 1, quantityReceived: 10, quantityAvailable: 10, entryDate: '2026-05-18T00:00:00Z', expiryDate: null, entryInvoiceNumber: 'TEST-001', enteredByEmployeeId: 1 };
     apiSpy.createBatch.and.returnValue(of(mockBatchItem));
+    apiSpy.getBatches.and.returnValue(of(mockBatches));
     
     component.saveBatch();
     
     // Ensure the payload sent to API does NOT have expiryDate
     expect(apiSpy.createBatch).toHaveBeenCalledWith(1, jasmine.objectContaining({
-      quantity: 10,
-      unitCostUsd: 5
+      quantityReceived: 10,
+      quantityAvailable: 10
     }));
     // Note: jasmine.objectContaining verifies expiryDate is NOT present if we don't include it in expected object
     const callArgs = apiSpy.createBatch.calls.mostRecent().args[1];

@@ -226,25 +226,27 @@ import { ProductsApiService, ProductListItem, ProductDetailResponse, BatchItem, 
                     <tr>
                       <th class="py-2 px-3">رقم الدفعة</th>
                       <th class="py-2 px-3">الكمية (متبقي/أصلي)</th>
-                      <th class="py-2 px-3">التكلفة للوحدة</th>
                       <th class="py-2 px-3" *ngIf="detailsData?.hasExpiry">الانتهاء</th>
+                      <th class="py-2 px-3">تاريخ الدخول</th>
+                      <th class="py-2 px-3">رقم الفاتورة</th>
                       <th class="py-2 px-3">الحالة</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
                     <tr *ngIf="!batchesData.length">
-                      <td [colSpan]="detailsData?.hasExpiry ? 5 : 4" class="py-4 text-center text-slate-400">لا توجد دفعات متوفرة</td>
+                      <td [colSpan]="detailsData?.hasExpiry ? 6 : 5" class="py-4 text-center text-slate-400">لا توجد دفعات متوفرة</td>
                     </tr>
                     <tr *ngFor="let b of batchesData">
                       <td class="py-2 px-3">#{{ b.id }}</td>
-                      <td class="py-2 px-3 font-medium text-slate-700">{{ b.quantityRemaining }} / <span class="text-slate-400 text-xs">{{ b.quantityOriginal }}</span></td>
-                      <td class="py-2 px-3">{{ b.unitCostUsd | currency:'USD' }}</td>
+                      <td class="py-2 px-3 font-medium text-slate-700">{{ b.quantityAvailable }} / <span class="text-slate-400 text-xs">{{ b.quantityReceived }}</span></td>
                       <td class="py-2 px-3" *ngIf="detailsData?.hasExpiry">
                         <span [class.text-red-500]="isExpired(b.expiryDate)">{{ b.expiryDate | date:'yyyy-MM-dd' || '—' }}</span>
                       </td>
+                      <td class="py-2 px-3 text-slate-500">{{ b.entryDate | date:'yyyy-MM-dd' || '—' }}</td>
+                      <td class="py-2 px-3 text-slate-500">{{ b.entryInvoiceNumber || '—' }}</td>
                       <td class="py-2 px-3 text-xs">
-                        <span *ngIf="b.isDepleted" class="text-orange-500">منتهية</span>
-                        <span *ngIf="!b.isDepleted" class="text-green-600">نشطة</span>
+                        <span *ngIf="b.quantityAvailable <= 0" class="text-orange-500">منتهية</span>
+                        <span *ngIf="b.quantityAvailable > 0" class="text-green-600">نشطة</span>
                       </td>
                     </tr>
                   </tbody>
@@ -260,12 +262,12 @@ import { ProductsApiService, ProductListItem, ProductDetailResponse, BatchItem, 
           <div class="p-4 border-b border-slate-100 font-bold text-slate-800">إضافة دفعة - {{ detailsData?.name }}</div>
           <div class="p-4 space-y-4 text-sm">
             <div>
-              <label class="block text-slate-600 mb-1">الكمية <span class="text-red-500">*</span></label>
-              <input type="number" [(ngModel)]="batchForm.quantity" class="input-field" min="1">
+              <label class="block text-slate-600 mb-1">الكمية المستلمة <span class="text-red-500">*</span></label>
+              <input type="number" [(ngModel)]="batchForm.quantityReceived" class="input-field" min="1">
             </div>
             <div>
-              <label class="block text-slate-600 mb-1">التكلفة (الوحدة - USD) <span class="text-red-500">*</span></label>
-              <input type="number" [(ngModel)]="batchForm.unitCostUsd" class="input-field" min="0">
+              <label class="block text-slate-600 mb-1">رقم الفاتورة المرجعي (اختياري)</label>
+              <input type="text" [(ngModel)]="batchForm.entryInvoiceNumber" class="input-field">
             </div>
             <div *ngIf="detailsData?.hasExpiry">
               <label class="block text-slate-600 mb-1">تاريخ الانتهاء <span class="text-red-500">*</span></label>
@@ -428,13 +430,13 @@ export class ProductsComponent implements OnInit {
 
   // --- Add Batch ---
   openAddBatchModal() {
-    this.batchForm = { quantity: 1, unitCostUsd: null, expiryDate: null };
+    this.batchForm = { quantityReceived: 1, entryInvoiceNumber: null, expiryDate: null };
     this.batchExpiryError = false;
     this.activeModal = 'addBatch';
   }
 
   isValidBatchForm() {
-    if (!this.batchForm.quantity || !this.batchForm.unitCostUsd) return false;
+    if (!this.batchForm.quantityReceived || this.batchForm.quantityReceived <= 0) return false;
     if (this.detailsData?.hasExpiry && !this.batchForm.expiryDate) return false;
     return true;
   }
@@ -443,16 +445,27 @@ export class ProductsComponent implements OnInit {
     if (!this.detailsData) return;
     
     // Ensure we don't send expiryDate if hasExpiry is false
-    const req = { ...this.batchForm };
-    if (!this.detailsData.hasExpiry) {
-      delete req.expiryDate;
+    const req: any = { 
+      quantityReceived: this.batchForm.quantityReceived,
+      quantityAvailable: this.batchForm.quantityReceived,
+      entryDate: new Date().toISOString(),
+      entryInvoiceNumber: this.batchForm.entryInvoiceNumber || null
+    };
+    
+    if (this.detailsData.hasExpiry) {
+      req.expiryDate = this.batchForm.expiryDate;
     }
 
     this.api.createBatch(this.detailsData.id, req).subscribe({
-      next: (newBatch) => {
-        // Refresh batches list
-        this.batchesData.push(newBatch);
-        this.activeModal = 'details'; // return to details
+      next: () => {
+        // Reload batches for current product
+        this.api.getBatches(this.detailsData!.id).subscribe(b => {
+          this.batchesData = b.items;
+          this.activeModal = 'details'; // return to details
+        });
+        
+        // Reload products state so that UI (like stock) is updated
+        this.productsState.loadInitialData();
       },
       error: () => {}
     });
