@@ -60,6 +60,7 @@ import { ProductsApiService, ProductListItem, ProductDetailResponse, BatchItem, 
           <table class="w-full text-right text-sm">
             <thead class="bg-slate-50 text-slate-500 font-medium border-b border-slate-200 sticky top-0">
               <tr>
+                <th class="py-3 px-4 w-16 text-center">رقم المنتج</th>
                 <th class="py-3 px-4">الاسم</th>
                 <th class="py-3 px-4">الباركود</th>
                 <th class="py-3 px-4">التصنيف</th>
@@ -70,12 +71,13 @@ import { ProductsApiService, ProductListItem, ProductDetailResponse, BatchItem, 
             </thead>
             <tbody class="divide-y divide-slate-100">
               <tr *ngIf="state.isLoading && !filteredProducts.length">
-                <td colspan="6" class="py-8 text-center text-slate-400">جاري التحميل...</td>
+                <td colspan="7" class="py-8 text-center text-slate-400">جاري التحميل...</td>
               </tr>
               <tr *ngIf="!state.isLoading && !filteredProducts.length">
-                <td colspan="6" class="py-8 text-center text-slate-400">لا توجد بيانات مطابقة</td>
+                <td colspan="7" class="py-8 text-center text-slate-400">لا توجد بيانات مطابقة</td>
               </tr>
               <tr *ngFor="let p of filteredProducts" class="hover:bg-slate-50 transition-colors">
+                <td class="py-3 px-4 text-center font-mono text-slate-500 text-xs">{{ p.id }}</td>
                 <td class="py-3 px-4 font-medium">{{ p.name }}</td>
                 <td class="py-3 px-4 text-slate-500">{{ p.barcode }}</td>
                 <td class="py-3 px-4 text-slate-500">{{ p.categoryName }}</td>

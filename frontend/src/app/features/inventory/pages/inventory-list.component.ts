@@ -75,6 +75,7 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
             <table class="w-full text-sm text-right">
               <thead class="text-xs text-slate-500 bg-slate-50 border-b border-slate-200">
                 <tr>
+                  <th class="px-6 py-4 font-semibold text-center w-16">رقم المنتج</th>
                   <th class="px-6 py-4 font-semibold">المنتج</th>
                   <th class="px-6 py-4 font-semibold">التصنيف</th>
                   <th class="px-6 py-4 font-semibold">الكمية المتوفرة</th>
@@ -87,6 +88,7 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
                 <tr *ngFor="let item of items" 
                     (click)="openDetails(item.productId)"
                     class="hover:bg-slate-50 transition-colors cursor-pointer group">
+                  <td class="px-6 py-4 text-center font-mono text-slate-500 text-xs">{{ item.productId }}</td>
                   <td class="px-6 py-4">
                     <div class="font-semibold text-slate-800">{{ item.productName }}</div>
                     <div class="text-xs text-slate-500 mt-1">{{ item.barcode }}</div>
