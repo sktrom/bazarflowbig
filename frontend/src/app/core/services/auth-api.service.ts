@@ -26,4 +26,8 @@ export class AuthApiService {
   login(request: LoginRequest): Observable<LoginResponse> {
     return this.http.post<LoginResponse>(`${this.baseUrl}/login`, request);
   }
+
+  logout(): Observable<any> {
+    return this.http.post(`${this.baseUrl}/logout`, {});
+  }
 }

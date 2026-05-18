@@ -1,13 +1,18 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 import { SessionService } from './session.service';
+import { AuthApiService } from './auth-api.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private isAuthenticatedSubject = new BehaviorSubject<boolean>(false);
   isAuthenticated$ = this.isAuthenticatedSubject.asObservable();
 
-  constructor(private sessionService: SessionService) {
+  constructor(
+    private sessionService: SessionService,
+    private authApiService: AuthApiService
+  ) {
     // Initialize based on session presence
     this.isAuthenticatedSubject.next(!!this.sessionService.getSessionId());
   }
@@ -20,8 +25,13 @@ export class AuthService {
     return this.isAuthenticatedSubject.value;
   }
 
-  logout(): void {
-    this.sessionService.clearSession();
-    this.setAuthenticated(false);
+  logout(): Observable<any> {
+    return this.authApiService.logout().pipe(
+      catchError(() => of(null)), // Ignore errors (e.g. 401)
+      tap(() => {
+        this.sessionService.clearSession();
+        this.setAuthenticated(false);
+      })
+    );
   }
 }

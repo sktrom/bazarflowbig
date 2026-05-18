@@ -1,4 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
+import { SessionService } from '../../core/services/session.service';
 
 @Component({
   selector: 'app-header',
@@ -15,10 +18,31 @@ import { Component } from '@angular/core';
         <h2 class="text-xl font-bold text-slate-800 hidden sm:block">Bazarflow</h2>
       </div>
       <div class="flex items-center gap-4">
-        <div class="text-sm font-medium text-slate-600">Username</div>
-        <button class="btn-secondary text-sm py-1 px-3">Logout</button>
+        <div class="text-sm font-medium text-slate-600">{{ username }}</div>
+        <button (click)="onLogout()" class="btn-secondary text-sm py-1 px-3">Logout</button>
       </div>
     </header>
   `
 })
-export class HeaderComponent {}
+export class HeaderComponent implements OnInit {
+  username = 'Username';
+
+  constructor(
+    private authService: AuthService,
+    private sessionService: SessionService,
+    private router: Router
+  ) {}
+
+  ngOnInit() {
+    const employee = this.sessionService.getEmployee();
+    if (employee && employee.fullName) {
+      this.username = employee.fullName;
+    }
+  }
+
+  onLogout() {
+    this.authService.logout().subscribe(() => {
+      this.router.navigate(['/login']);
+    });
+  }
+}
