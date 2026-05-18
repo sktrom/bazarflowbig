@@ -48,7 +48,7 @@ import { ProductDto } from '../services/cashier-api.service';
           >
             <div class="text-xs text-slate-400 mb-1 line-clamp-1">{{ p.categoryName }}</div>
             <div class="font-bold text-slate-800 text-sm mb-2 flex-1 line-clamp-2">{{ p.name }}</div>
-            <div class="text-primary font-semibold text-sm">{{ p.basePriceUsd | currency:'USD' }}</div>
+            <div class="text-primary font-semibold text-sm">{{ p.priceUsd | currency:'USD' }}</div>
           </div>
         </div>
       </div>

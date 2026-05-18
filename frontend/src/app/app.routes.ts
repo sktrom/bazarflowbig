@@ -43,6 +43,27 @@ export const routes: Routes = [
         data: { screenKey: 'Invoices' },
         loadComponent: () =>
           import('./features/invoices/invoices.component').then(m => m.InvoicesComponent)
+      },
+      {
+        path: 'inventory',
+        canActivate: [ScreenPermissionGuard],
+        data: { screenKey: 'Inventory' },
+        loadComponent: () =>
+          import('./features/inventory/pages/inventory-list.component').then(m => m.InventoryListComponent)
+      },
+      {
+        path: 'offers',
+        canActivate: [ScreenPermissionGuard],
+        data: { screenKey: 'Offers' },
+        loadComponent: () =>
+          import('./features/offers/pages/offers.component').then(m => m.OffersComponent)
+      },
+      {
+        path: 'reports',
+        canActivate: [ScreenPermissionGuard],
+        data: { screenKey: 'Reports' },
+        loadComponent: () =>
+          import('./features/reports/pages/reports.component').then(m => m.ReportsComponent)
       }
     ]
   },

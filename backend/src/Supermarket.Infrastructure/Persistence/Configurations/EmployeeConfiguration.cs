@@ -37,6 +37,20 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
 
             builder.Property(e => e.UpdatedAt)
                 .IsRequired();
+
+            builder.HasData(
+                new Employee
+                {
+                    Id = 1,
+                    FullName = "System Admin",
+                    Username = "admin",
+                    PasswordHash = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+                    Phone = "",
+                    IsActive = true,
+                    CreatedAt = new System.DateTime(2026, 1, 1, 0, 0, 0, System.DateTimeKind.Utc),
+                    UpdatedAt = new System.DateTime(2026, 1, 1, 0, 0, 0, System.DateTimeKind.Utc)
+                }
+            );
         }
     }
 }

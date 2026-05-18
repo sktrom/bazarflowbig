@@ -73,6 +73,13 @@ namespace Supermarket.Application.CartFinalization.Services
             invoice.ExchangeRateSypSnapshot = rate;
             invoice.TotalSyp = invoice.TotalUsd * rate;
 
+            // Ensure inventory is reserved before consuming (handles direct Working -> Complete)
+            var reservedAllocations = await _inventoryRepo.GetReservedByInvoiceAsync(invoice.Id);
+            if (!reservedAllocations.Any())
+            {
+                await ReserveInventoryAsync(invoice.Id);
+            }
+
             // Consume inventory (FEFO handled in repo)
             await ConsumeInventoryAsync(invoice.Id);
 

@@ -46,12 +46,23 @@ namespace Supermarket.Infrastructure.Repositories
 
         public async Task DeleteInvoiceWithLinesAsync(long invoiceId)
         {
-            // Delete lines first (FK constraint), then invoice
             var lines = await _db.InvoiceLines.Where(l => l.InvoiceId == invoiceId).ToListAsync();
+            var lineIds = lines.Select(l => l.Id).ToList();
+
+            if (lineIds.Any())
+            {
+                var allocations = await _db.InvoiceLineBatchAllocations
+                    .Where(a => lineIds.Contains(a.InvoiceLineId))
+                    .ToListAsync();
+                _db.InvoiceLineBatchAllocations.RemoveRange(allocations);
+            }
+
             _db.InvoiceLines.RemoveRange(lines);
 
             var invoice = await _db.Invoices.FindAsync(invoiceId);
             if (invoice != null) _db.Invoices.Remove(invoice);
+
+            await _db.SaveChangesAsync();
         }
 
         public async Task SaveChangesAsync()

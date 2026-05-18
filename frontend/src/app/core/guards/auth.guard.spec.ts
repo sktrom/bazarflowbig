@@ -30,12 +30,12 @@ describe('AuthGuard', () => {
     expect(guard.canActivate()).toBeTrue();
   });
 
-  it('should redirect to /unauthorized if user is not logged in', () => {
+  it('should redirect to /login if user is not logged in', () => {
     authService.isLoggedIn.and.returnValue(false);
     const mockUrlTree = {} as any;
     router.parseUrl.and.returnValue(mockUrlTree);
     
     expect(guard.canActivate()).toBe(mockUrlTree);
-    expect(router.parseUrl).toHaveBeenCalledWith('/unauthorized');
+    expect(router.parseUrl).toHaveBeenCalledWith('/login');
   });
 });

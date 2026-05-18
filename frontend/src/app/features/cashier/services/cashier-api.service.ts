@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
 
 export interface CartLineDto {
@@ -30,10 +31,10 @@ export interface ProductDto {
   id: number;
   name: string;
   barcode: string;
-  basePriceUsd: number;
   categoryId: number;
   categoryName: string;
-  stockQuantity: number;
+  priceUsd: number;
+  isActive: boolean;
 }
 
 export interface CategoryDto {
@@ -51,7 +52,9 @@ export class CashierApiService {
 
   // Products Source for Cashier
   getCashierProducts(): Observable<ProductDto[]> {
-    return this.http.get<ProductDto[]>(this.productsBase);
+    return this.http.get<{ items: ProductDto[] }>(this.productsBase).pipe(
+      map(response => response.items || [])
+    );
   }
 
   // Categories (assuming accessible or we can derive them)

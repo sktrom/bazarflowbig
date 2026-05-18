@@ -1,18 +1,24 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
+import { SessionService } from './session.service';
 
 @Injectable({ providedIn: 'root' })
 export class PermissionsService {
-  private permissionsSubject = new BehaviorSubject<string[]>([]);
-  permissions$ = this.permissionsSubject.asObservable();
+  private permissionsSubject: BehaviorSubject<string[]>;
+  permissions$: Observable<string[]>;
+
+  constructor(private sessionService: SessionService) {
+    const initialPermissions = this.sessionService.getPermissions();
+    this.permissionsSubject = new BehaviorSubject<string[]>(initialPermissions);
+    this.permissions$ = this.permissionsSubject.asObservable();
+  }
 
   setPermissions(permissions: string[]): void {
+    this.sessionService.setPermissions(permissions);
     this.permissionsSubject.next(permissions);
   }
 
   hasPermission(screenKey: string): boolean {
-    // If the list is empty, we might not have loaded them yet, or user has none.
-    // In a real scenario, this gets populated after successful login/session restore.
     return this.permissionsSubject.value.includes(screenKey);
   }
 }

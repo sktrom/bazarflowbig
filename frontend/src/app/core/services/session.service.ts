@@ -11,6 +11,8 @@ export class SessionService {
   private readonly SESSION_KEY = 'x_session_id';
   private readonly EMPLOYEE_KEY = 'session_employee';
 
+  private readonly PERMISSIONS_KEY = 'session_permissions';
+
   // sessionId is numeric (long) from backend — stored as string representation
   setSessionId(sessionId: number): void {
     localStorage.setItem(this.SESSION_KEY, sessionId.toString());
@@ -30,8 +32,19 @@ export class SessionService {
     try { return JSON.parse(raw) as StoredEmployee; } catch { return null; }
   }
 
+  setPermissions(permissions: string[]): void {
+    localStorage.setItem(this.PERMISSIONS_KEY, JSON.stringify(permissions));
+  }
+
+  getPermissions(): string[] {
+    const raw = localStorage.getItem(this.PERMISSIONS_KEY);
+    if (!raw) return [];
+    try { return JSON.parse(raw) as string[]; } catch { return []; }
+  }
+
   clearSession(): void {
     localStorage.removeItem(this.SESSION_KEY);
     localStorage.removeItem(this.EMPLOYEE_KEY);
+    localStorage.removeItem(this.PERMISSIONS_KEY);
   }
 }

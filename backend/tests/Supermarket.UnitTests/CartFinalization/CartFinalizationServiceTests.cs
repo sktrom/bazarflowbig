@@ -142,6 +142,68 @@ namespace Supermarket.UnitTests.CartFinalization
             Assert.Equal("NO_WORKING_CART_EXISTS", ex.Message);
         }
 
+        [Fact]
+        public async Task Complete_FromWorkingCart_ShouldReserveAndConsumeInventory_WhenNoAllocationsExist()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            var invoice = new Invoice { Id = 10, Status = InvoiceStatus.Working, TotalUsd = 100m };
+            _finalizationRepoMock.Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1)).ReturnsAsync(invoice);
+            _settingsRepoMock.Setup(r => r.GetRequiredDecimalAsync("exchange_rate_syp")).ReturnsAsync(15000m);
+            
+            // Setup lines requiring reservation
+            var lines = new List<InvoiceLine> 
+            { 
+                new InvoiceLine { Id = 100, ProductId = 5, Quantity = 2 }
+            };
+            _cartRepoMock.Setup(r => r.GetCartLinesAsync(10)).ReturnsAsync(lines);
+            
+            // Setup batches for reservation
+            var batch = new ProductBatch { Id = 50, ProductId = 5, QuantityAvailable = 10 };
+            _inventoryRepoMock.Setup(r => r.GetAvailableBatchesFEFOAsync(5)).ReturnsAsync(new List<ProductBatch> { batch });
+            
+            // Setup no prior reservations, but after reservation it should return the newly created ones
+            var newlyCreatedAlloc = new InvoiceLineBatchAllocation { Id = 99, AllocationStatus = AllocationStatus.Reserved, Batch = batch, Quantity = 2 };
+            _inventoryRepoMock.SetupSequence(r => r.GetReservedByInvoiceAsync(10))
+                .ReturnsAsync(new List<InvoiceLineBatchAllocation>()) // First call: check existing
+                .ReturnsAsync(new List<InvoiceLineBatchAllocation> { newlyCreatedAlloc }); // Second call: consume
+
+            var service = CreateService();
+            await service.CompleteAsync();
+
+            // Verify Reservation occurred
+            _inventoryRepoMock.Verify(r => r.AddAllocationAsync(It.Is<InvoiceLineBatchAllocation>(a => a.AllocationStatus == AllocationStatus.Reserved && a.Quantity == 2)), Times.Once);
+            Assert.Equal(8, batch.QuantityAvailable); // Deduced from batch
+
+            // Verify Consumption occurred
+            Assert.Equal(AllocationStatus.Consumed, newlyCreatedAlloc.AllocationStatus);
+            _inventoryRepoMock.Verify(r => r.UpdateAllocationAsync(newlyCreatedAlloc), Times.Once);
+        }
+
+        [Fact]
+        public async Task Complete_ShouldOnlyConsumeInventory_WhenAllocationsAlreadyExist_ToPreventDoubleDeduction()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            var invoice = new Invoice { Id = 10, Status = InvoiceStatus.Working, TotalUsd = 100m };
+            _finalizationRepoMock.Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1)).ReturnsAsync(invoice);
+            _settingsRepoMock.Setup(r => r.GetRequiredDecimalAsync("exchange_rate_syp")).ReturnsAsync(15000m);
+            
+            // Allocations already exist (e.g. was Suspended before)
+            var existingAlloc = new InvoiceLineBatchAllocation { Id = 99, AllocationStatus = AllocationStatus.Reserved, Quantity = 2 };
+            _inventoryRepoMock.Setup(r => r.GetReservedByInvoiceAsync(10)).ReturnsAsync(new List<InvoiceLineBatchAllocation> { existingAlloc });
+
+            var service = CreateService();
+            await service.CompleteAsync();
+
+            // Should NOT call ReserveInventoryAsync (GetCartLinesAsync wouldn't be called)
+            _cartRepoMock.Verify(r => r.GetCartLinesAsync(10), Times.Never);
+            _inventoryRepoMock.Verify(r => r.GetAvailableBatchesFEFOAsync(It.IsAny<int>()), Times.Never);
+            _inventoryRepoMock.Verify(r => r.AddAllocationAsync(It.IsAny<InvoiceLineBatchAllocation>()), Times.Never);
+
+            // Verify Consumption occurred
+            Assert.Equal(AllocationStatus.Consumed, existingAlloc.AllocationStatus);
+            _inventoryRepoMock.Verify(r => r.UpdateAllocationAsync(existingAlloc), Times.Once);
+        }
+
         // ─── Cancel Tests ──────────────────────────────────────────────────────────
 
         [Fact]

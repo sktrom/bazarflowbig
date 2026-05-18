@@ -24,6 +24,16 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
 
             builder.Property(d => d.IsActive)
                 .HasDefaultValue(true);
+
+            builder.HasData(
+                new PosDevice
+                {
+                    Id = 1,
+                    DeviceCode = "DEFAULT_DEVICE",
+                    DeviceName = "Default POS Device",
+                    IsActive = true
+                }
+            );
         }
     }
 }

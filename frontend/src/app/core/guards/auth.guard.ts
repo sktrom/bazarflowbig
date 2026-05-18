@@ -12,7 +12,7 @@ export class AuthGuard implements CanActivate {
       return true;
     }
     
-    // Redirect to unauthorized or login (if login existed)
-    return this.router.parseUrl('/unauthorized');
+    // Redirect to login
+    return this.router.parseUrl('/login');
   }
 }

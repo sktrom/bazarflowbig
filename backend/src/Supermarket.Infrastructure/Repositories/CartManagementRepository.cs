@@ -42,12 +42,19 @@ namespace Supermarket.Infrastructure.Repositories
 
         public async Task DeleteInvoiceAsync(Invoice invoice)
         {
-            // Explicitly delete related lines first
             var lines = await _context.InvoiceLines.Where(l => l.InvoiceId == invoice.Id).ToListAsync();
-            if (lines.Any())
+            var lineIds = lines.Select(l => l.Id).ToList();
+
+            if (lineIds.Any())
             {
+                var allocations = await _context.InvoiceLineBatchAllocations
+                    .Where(a => lineIds.Contains(a.InvoiceLineId))
+                    .ToListAsync();
+                
+                _context.InvoiceLineBatchAllocations.RemoveRange(allocations);
                 _context.InvoiceLines.RemoveRange(lines);
             }
+            
             _context.Invoices.Remove(invoice);
             await _context.SaveChangesAsync();
         }
@@ -60,6 +67,15 @@ namespace Supermarket.Infrastructure.Repositories
 
         public async Task RemoveLineAsync(InvoiceLine line)
         {
+            var allocations = await _context.InvoiceLineBatchAllocations
+                .Where(a => a.InvoiceLineId == line.Id)
+                .ToListAsync();
+
+            if (allocations.Any())
+            {
+                _context.InvoiceLineBatchAllocations.RemoveRange(allocations);
+            }
+
             _context.InvoiceLines.Remove(line);
             await _context.SaveChangesAsync();
         }

@@ -14,7 +14,7 @@ describe('CashierComponent & CashierState', () => {
   let stateService: CashierStateService;
 
   const mockProducts: ProductDto[] = [
-    { id: 1, name: 'Prod A', barcode: '111', basePriceUsd: 10, categoryId: 1, categoryName: 'Cat1', stockQuantity: 10 }
+    { id: 1, name: 'Prod A', barcode: '111', priceUsd: 10, categoryId: 1, categoryName: 'Cat1', isActive: true }
   ];
 
   const emptyCart: CartResponse = { status: 'Working', subtotalUsd: 0, totalUsd: 0, lines: [] };
