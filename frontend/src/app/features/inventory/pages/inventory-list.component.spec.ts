@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testin
 import { InventoryListComponent } from './inventory-list.component';
 import { InventoryApiService } from '../services/inventory-api.service';
 import { of, throwError } from 'rxjs';
+import { HttpErrorResponse, HttpResponse, HttpHeaders } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 
 describe('InventoryListComponent', () => {
@@ -10,7 +11,7 @@ describe('InventoryListComponent', () => {
   let inventoryApiSpy: jasmine.SpyObj<InventoryApiService>;
 
   beforeEach(async () => {
-    const spy = jasmine.createSpyObj('InventoryApiService', ['getInventoryList', 'getInventoryDetails']);
+    const spy = jasmine.createSpyObj('InventoryApiService', ['getInventoryList', 'getInventoryDetails', 'exportInventory']);
 
     await TestBed.configureTestingModule({
       imports: [InventoryListComponent, FormsModule],
@@ -93,4 +94,22 @@ describe('InventoryListComponent', () => {
     expect(inventoryApiSpy.getInventoryList).toHaveBeenCalled();
     expect(component.page).toBe(1);
   }));
+
+  it('should export inventory with filters', () => {
+    fixture.detectChanges();
+    component.searchQuery = 'test';
+    component.filterHasStock = true;
+    
+    const mockBlob = new Blob(['test'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const mockResponse = new HttpResponse({ body: mockBlob, headers: new HttpHeaders({'Content-Disposition': 'attachment; filename="inventory_export.xlsx"'}) });
+    
+    inventoryApiSpy.exportInventory.and.returnValue(of(mockResponse));
+    spyOn(window.URL, 'createObjectURL').and.returnValue('blob:url');
+    spyOn(window.URL, 'revokeObjectURL');
+
+    component.exportInventory();
+
+    expect(inventoryApiSpy.exportInventory).toHaveBeenCalledWith(jasmine.objectContaining({ format: 'excel', search: 'test', hasStock: true }));
+    expect(window.URL.createObjectURL).toHaveBeenCalled();
+  });
 });

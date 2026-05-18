@@ -102,6 +102,10 @@ export class ProductsStateService {
     );
   }
 
+  setError(message: string): void {
+    this.patchState({ error: message });
+  }
+
   clearError() {
     this.patchState({ error: null });
   }

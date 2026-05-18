@@ -16,10 +16,16 @@ import { HttpErrorResponse } from '@angular/common/http';
       <div class="bg-white p-4 sm:p-6 border-b border-slate-200 shrink-0">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <h1 class="text-2xl font-bold text-slate-800">العروض</h1>
-          <button class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-md font-medium transition-colors shadow-sm flex items-center gap-2" (click)="openCreateModal()">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-            إضافة عرض
-          </button>
+          <div class="flex gap-3">
+            <button class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-medium transition-colors shadow-sm flex items-center gap-2" (click)="exportOffers()" [disabled]="isLoading">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+              تصدير
+            </button>
+            <button class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-md font-medium transition-colors shadow-sm flex items-center gap-2" (click)="openCreateModal()">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+              إضافة عرض
+            </button>
+          </div>
         </div>
 
         <div class="flex flex-col sm:flex-row gap-4">
@@ -403,6 +409,44 @@ export class OffersComponent implements OnInit {
     
     // Auto clear global error after 5s
     setTimeout(() => { this.globalError = ''; }, 5000);
+  }
+
+  exportOffers() {
+    const request = {
+      format: 'excel',
+      isActive: this.filterStatus ? (this.filterStatus === 'active') : undefined
+    };
+
+    this.api.exportOffers(request).subscribe({
+      next: (response) => {
+        const blob = response.body;
+        if (!blob) return;
+
+        let filename = 'offers_export.xlsx';
+        const contentDisposition = response.headers.get('Content-Disposition');
+        if (contentDisposition) {
+          const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+          const matches = filenameRegex.exec(contentDisposition);
+          if (matches != null && matches[1]) {
+            filename = matches[1].replace(/['"]/g, '');
+          }
+        }
+
+        // Trigger download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.globalError = 'فشل تصدير العروض';
+        setTimeout(() => { this.globalError = ''; }, 5000);
+      }
+    });
   }
 
   closeModal() {

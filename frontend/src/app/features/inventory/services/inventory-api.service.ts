@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import { InventoryListResponse, InventoryDetailsResponse } from '../models/inventory.model';
@@ -36,5 +36,12 @@ export class InventoryApiService {
 
   getInventoryDetails(productId: number): Observable<InventoryDetailsResponse> {
     return this.http.get<InventoryDetailsResponse>(`${this.baseUrl}/${productId}`);
+  }
+
+  exportInventory(request: any): Observable<HttpResponse<Blob>> {
+    return this.http.post(`${environment.apiUrl}/api/exports/inventory`, request, {
+      responseType: 'blob',
+      observe: 'response'
+    });
   }
 }

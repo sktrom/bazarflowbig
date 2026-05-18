@@ -489,13 +489,41 @@ export class ProductsComponent implements OnInit {
 
   // --- Export ---
   exportProducts() {
-    this.api.exportProducts().subscribe(blob => {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `products_export_${new Date().getTime()}.csv`; // Or determine from headers
-      a.click();
-      window.URL.revokeObjectURL(url);
+    const request = {
+      format: 'excel',
+      search: this.searchTerm || undefined,
+      categoryId: this.filterCategory || undefined,
+      isActive: this.filterStatus ? (this.filterStatus === 'active') : undefined
+    };
+
+    this.api.exportProducts(request).subscribe({
+      next: (response) => {
+        const blob = response.body;
+        if (!blob) return;
+
+        let filename = 'products_export.xlsx';
+        const contentDisposition = response.headers.get('Content-Disposition');
+        if (contentDisposition) {
+          const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+          const matches = filenameRegex.exec(contentDisposition);
+          if (matches != null && matches[1]) {
+            filename = matches[1].replace(/['"]/g, '');
+          }
+        }
+
+        // Trigger download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.productsState.setError('فشل تصدير البيانات');
+      }
     });
   }
 

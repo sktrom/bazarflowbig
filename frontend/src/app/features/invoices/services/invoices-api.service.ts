@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 
@@ -123,8 +123,11 @@ export class InvoicesApiService {
     return this.http.post(`${environment.apiUrl}/api/cashier/cart/load-suspended/${invoiceId}`, {});
   }
 
-  exportInvoices(filters: any): Observable<Blob> {
-    return this.http.post(`${environment.apiUrl}/api/exports/invoices`, filters, { responseType: 'blob' });
+  exportInvoices(filters: any): Observable<HttpResponse<Blob>> {
+    return this.http.post(`${environment.apiUrl}/api/exports/invoices`, filters, { 
+      responseType: 'blob',
+      observe: 'response'
+    });
   }
 
   getAdjustmentRequest(invoiceId: number, requestId: number): Observable<AdjustmentRequestResponse> {

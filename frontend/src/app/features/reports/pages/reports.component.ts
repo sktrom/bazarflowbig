@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReportsApiService } from '../services/reports-api.service';
@@ -111,16 +111,18 @@ type TabType = 'Sales' | 'Products' | 'Employees' | 'Inventory' | 'Expiry';
                         <th class="px-4 py-3">الرقم</th>
                         <th class="px-4 py-3">التاريخ</th>
                         <th class="px-4 py-3">الموظف</th>
-                        <th class="px-4 py-3">الإجمالي (USD)</th>
+                        <th class="px-4 py-3 text-center">الإجمالي (USD)</th>
+                        <th class="px-4 py-3 text-center">الإجمالي (SYP)</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                      <tr *ngIf="!salesInvoices.length"><td colspan="4" class="px-4 py-6 text-center text-slate-400">لا توجد بيانات</td></tr>
+                      <tr *ngIf="!salesInvoices.length"><td colspan="5" class="px-4 py-6 text-center text-slate-400">لا توجد بيانات</td></tr>
                       <tr *ngFor="let item of salesInvoices" class="hover:bg-slate-50">
                         <td class="px-4 py-3">{{ item.invoiceNumber }}</td>
                         <td class="px-4 py-3 text-slate-500">{{ item.createdAt | date:'short' }}</td>
                         <td class="px-4 py-3">{{ item.employeeName }}</td>
-                        <td class="px-4 py-3 font-semibold">{{ item.totalUsd | currency:'USD' }}</td>
+                        <td class="px-4 py-3 text-center font-semibold text-green-600">{{ item.totalUsd | currency:'USD' }}</td>
+                        <td class="px-4 py-3 text-center font-semibold text-slate-700">{{ item.totalSyp ? (item.totalSyp | number:'1.0-0') + ' SYP' : '-' }}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -437,9 +439,10 @@ export class ReportsComponent implements OnInit, OnDestroy {
   // Chart
   @ViewChild('chartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
   chartInstance: Chart | null = null;
+  chartTimeoutId: any = null;
   isChartEmpty = true;
 
-  constructor(private api: ReportsApiService) {}
+  constructor(private api: ReportsApiService, private cdr: ChangeDetectorRef) {}
 
   ngOnInit() {
     this.refreshData();
@@ -452,8 +455,16 @@ export class ReportsComponent implements OnInit, OnDestroy {
   switchTab(tab: TabType) {
     if (this.activeTab === tab) return;
     this.activeTab = tab;
-    // reset filters when switching tabs (except maybe dates, but to be safe let's reset to null)
-    this.filters = { dateFrom: null, dateTo: null, status: null, productId: null, employeeId: null, categoryId: null };
+    
+    // Retain dateFrom and dateTo, reset specific filters
+    this.filters = { 
+      ...this.filters,
+      status: null, 
+      productId: null, 
+      employeeId: null, 
+      categoryId: null 
+    };
+    
     this.destroyChart();
     this.refreshData();
   }
@@ -507,8 +518,8 @@ export class ReportsComponent implements OnInit, OnDestroy {
         const items = res.items || [];
         if (items.length) {
           this.isChartEmpty = false;
-          // Give view child time to render if it was hidden
-          setTimeout(() => {
+          this.cdr.detectChanges(); // Ensure canvas is in DOM
+          this.chartTimeoutId = setTimeout(() => {
             this.renderChart('line', items.map(i => i.dateLabel), items.map(i => i.revenueUsd), 'المبيعات (USD)');
           });
         } else {
@@ -540,7 +551,8 @@ export class ReportsComponent implements OnInit, OnDestroy {
         const items = res.items || [];
         if (items.length) {
           this.isChartEmpty = false;
-          setTimeout(() => {
+          this.cdr.detectChanges();
+          this.chartTimeoutId = setTimeout(() => {
             this.renderChart('bar', items.map(i => i.productName), items.map(i => i.totalSalesRevenueUsd), 'إيرادات المبيعات (USD)');
           });
         } else {
@@ -572,7 +584,8 @@ export class ReportsComponent implements OnInit, OnDestroy {
         const items = res.items || [];
         if (items.length) {
           this.isChartEmpty = false;
-          setTimeout(() => {
+          this.cdr.detectChanges();
+          this.chartTimeoutId = setTimeout(() => {
             this.renderChart('bar', items.map(i => i.employeeName), items.map(i => i.totalSalesRevenueUsd), 'المبيعات حسب الموظف (USD)');
           });
         } else {
@@ -604,7 +617,8 @@ export class ReportsComponent implements OnInit, OnDestroy {
         const items = res.items || [];
         if (items.length) {
           this.isChartEmpty = false;
-          setTimeout(() => {
+          this.cdr.detectChanges();
+          this.chartTimeoutId = setTimeout(() => {
             this.renderChart('doughnut', items.map(i => i.categoryName), items.map(i => i.totalStockValueUsd), 'قيمة المخزون حسب التصنيف (USD)');
           });
         } else {
@@ -636,7 +650,8 @@ export class ReportsComponent implements OnInit, OnDestroy {
         const items = res.items || [];
         if (items.length) {
           this.isChartEmpty = false;
-          setTimeout(() => {
+          this.cdr.detectChanges();
+          this.chartTimeoutId = setTimeout(() => {
             this.renderChart('doughnut', items.map(i => i.expiryStatus), items.map(i => i.batchCount), 'حالة الدفعات');
           });
         } else {
@@ -651,6 +666,10 @@ export class ReportsComponent implements OnInit, OnDestroy {
   // --- Chart Handling ---
 
   private destroyChart() {
+    if (this.chartTimeoutId) {
+      clearTimeout(this.chartTimeoutId);
+      this.chartTimeoutId = null;
+    }
     if (this.chartInstance) {
       this.chartInstance.destroy();
       this.chartInstance = null;

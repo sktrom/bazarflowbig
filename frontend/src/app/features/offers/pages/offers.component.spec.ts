@@ -3,7 +3,7 @@ import { OffersComponent } from './offers.component';
 import { OffersApiService } from '../services/offers-api.service';
 import { of, throwError } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpResponse, HttpHeaders } from '@angular/common/http';
 
 describe('OffersComponent', () => {
   let component: OffersComponent;
@@ -11,7 +11,7 @@ describe('OffersComponent', () => {
   let apiSpy: jasmine.SpyObj<OffersApiService>;
 
   beforeEach(async () => {
-    const spy = jasmine.createSpyObj('OffersApiService', ['getAll', 'create', 'update', 'cancel', 'delete']);
+    const spy = jasmine.createSpyObj('OffersApiService', ['getAll', 'create', 'update', 'cancel', 'delete', 'exportOffers']);
 
     await TestBed.configureTestingModule({
       imports: [OffersComponent, FormsModule],
@@ -81,5 +81,22 @@ describe('OffersComponent', () => {
 
     expect(component.globalError).toBe('لا يمكن حذف هذا العرض لأنه مستخدم أو قديم، يمكن إلغاؤه فقط');
     expect(component.activeModal).toBeNull(); // modal closes, toast shows
+  });
+
+  it('should export offers with filters', () => {
+    fixture.detectChanges();
+    component.filterStatus = 'active';
+    
+    const mockBlob = new Blob(['test'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const mockResponse = new HttpResponse({ body: mockBlob, headers: new HttpHeaders({'Content-Disposition': 'attachment; filename="offers_export.xlsx"'}) });
+    
+    apiSpy.exportOffers.and.returnValue(of(mockResponse));
+    spyOn(window.URL, 'createObjectURL').and.returnValue('blob:url');
+    spyOn(window.URL, 'revokeObjectURL');
+
+    component.exportOffers();
+
+    expect(apiSpy.exportOffers).toHaveBeenCalledWith(jasmine.objectContaining({ format: 'excel', isActive: true }));
+    expect(window.URL.createObjectURL).toHaveBeenCalled();
   });
 });

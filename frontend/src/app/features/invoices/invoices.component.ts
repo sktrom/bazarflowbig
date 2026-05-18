@@ -25,7 +25,7 @@ import { Router } from '@angular/router';
               <svg class="w-4 h-4 mr-2 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             <div class="absolute left-0 mt-2 w-48 bg-white border border-slate-200 rounded-md shadow-lg hidden group-hover:block z-50">
-              <button class="block w-full text-right px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">تصدير الفواتير (Export)</button>
+              <button (click)="exportInvoices()" class="block w-full text-right px-4 py-2 text-sm text-slate-700 hover:bg-slate-100">تصدير الفواتير (Export)</button>
             </div>
           </div>
         </div>
@@ -492,8 +492,46 @@ export class InvoicesComponent implements OnInit {
   }
 
   exportInvoices() {
-    // Export is entry-only via action menu per plan.
-    // Logic removed as per instruction.
+    const request = {
+      format: 'excel',
+      customerName: this.filters.customerName || undefined,
+      status: this.filters.status || undefined,
+      dateFrom: this.filters.dateFrom || undefined,
+      dateTo: this.filters.dateTo || undefined,
+      employeeId: this.filters.employeeId || undefined,
+      adjustmentRequestStatus: this.filters.adjustmentRequestStatus || undefined,
+      manualPriceEdited: this.filters.manualPriceEdited ? true : undefined
+    };
+
+    this.api.exportInvoices(request).subscribe({
+      next: (response) => {
+        const blob = response.body;
+        if (!blob) return;
+
+        let filename = 'invoices_export.xlsx';
+        const contentDisposition = response.headers.get('Content-Disposition');
+        if (contentDisposition) {
+          const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+          const matches = filenameRegex.exec(contentDisposition);
+          if (matches != null && matches[1]) {
+            filename = matches[1].replace(/['"]/g, '');
+          }
+        }
+
+        // Trigger download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.invoicesState.setError('فشل تصدير الفواتير');
+      }
+    });
   }
 
   getStatusLabel(s: string) {

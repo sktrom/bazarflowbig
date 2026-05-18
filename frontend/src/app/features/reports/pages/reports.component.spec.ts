@@ -77,12 +77,22 @@ describe('ReportsComponent', () => {
     // Fake a chart instance
     const destroySpy = jasmine.createSpy('destroy');
     component.chartInstance = { destroy: destroySpy } as any;
+    
+    // Set some filters to test retention
+    component.filters.dateFrom = '2023-01-01';
+    component.filters.dateTo = '2023-12-31';
+    component.filters.productId = 5;
 
     component.switchTab('Expiry');
     
     expect(destroySpy).toHaveBeenCalled();
     expect(component.activeTab).toBe('Expiry');
     expect(apiSpy.getExpirySummary).toHaveBeenCalled();
+    
+    // Dates should be retained, but specific filters should be reset
+    expect(component.filters.dateFrom).toBe('2023-01-01');
+    expect(component.filters.dateTo).toBe('2023-12-31');
+    expect(component.filters.productId).toBeNull();
   });
 
   it('should display empty state message if no data', () => {
@@ -90,6 +100,14 @@ describe('ReportsComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     expect(el.textContent).toContain('لا توجد بيانات');
     expect(el.textContent).toContain('لا توجد بيانات كافية للرسم البياني');
+  });
+
+  it('should clear chart timeout on destroy', () => {
+    spyOn(window, 'clearTimeout');
+    component.chartTimeoutId = 12345;
+    component.ngOnDestroy();
+    expect(window.clearTimeout).toHaveBeenCalledWith(12345);
+    expect(component.chartTimeoutId).toBeNull();
   });
 
 });

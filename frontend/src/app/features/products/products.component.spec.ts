@@ -1,7 +1,7 @@
 import { TestBed, ComponentFixture, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { of, throwError } from 'rxjs';
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpResponse, HttpHeaders } from '@angular/common/http';
 import { ProductsComponent } from './products.component';
 import { ProductsStateService } from './services/products-state.service';
 import { ProductsApiService, ProductListResponse, CategoryListResponse, ProductDetailResponse, BatchListResponse, BatchItem } from './services/products-api.service';
@@ -158,13 +158,14 @@ describe('ProductsComponent & ProductsState', () => {
   });
 
   it('export entry action triggers expected flow hook', () => {
-    const mockBlob = new Blob(['test'], { type: 'text/csv' });
-    apiSpy.exportProducts.and.returnValue(of(mockBlob));
+    const mockBlob = new Blob(['test'], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const mockResponse = new HttpResponse({ body: mockBlob, headers: new HttpHeaders({'Content-Disposition': 'attachment; filename="test.xlsx"'}) });
+    apiSpy.exportProducts.and.returnValue(of(mockResponse));
     spyOn(window.URL, 'createObjectURL').and.returnValue('blob:url');
     spyOn(window.URL, 'revokeObjectURL');
     
     component.exportProducts();
-    expect(apiSpy.exportProducts).toHaveBeenCalled();
+    expect(apiSpy.exportProducts).toHaveBeenCalledWith(jasmine.objectContaining({ format: 'excel' }));
     expect(window.URL.createObjectURL).toHaveBeenCalled();
   });
 });

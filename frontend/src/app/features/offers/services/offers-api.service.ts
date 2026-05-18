@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 import {
@@ -35,5 +35,12 @@ export class OffersApiService {
 
   delete(id: number): Observable<DeleteOfferResponse> {
     return this.http.delete<DeleteOfferResponse>(`${this.baseUrl}/${id}`);
+  }
+
+  exportOffers(request: any): Observable<HttpResponse<Blob>> {
+    return this.http.post(`${environment.apiUrl}/api/exports/offers`, request, {
+      responseType: 'blob',
+      observe: 'response'
+    });
   }
 }

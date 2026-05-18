@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../../environments/environment';
 
@@ -124,7 +124,10 @@ export class ProductsApiService {
   }
 
   // Export Entry
-  exportProducts(): Observable<Blob> {
-    return this.http.post(`${environment.apiUrl}/api/exports/products`, {}, { responseType: 'blob' });
+  exportProducts(request: any): Observable<HttpResponse<Blob>> {
+    return this.http.post(`${environment.apiUrl}/api/exports/products`, request, { 
+      responseType: 'blob',
+      observe: 'response'
+    });
   }
 }
