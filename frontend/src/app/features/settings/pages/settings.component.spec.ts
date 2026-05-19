@@ -25,13 +25,21 @@ describe('SettingsComponent', () => {
     const spy = jasmine.createSpyObj('SettingsApiService', [
       'getEmployees','getEmployee','createEmployee','updateEmployee','deleteEmployee','resetPassword',
       'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings','createBackup',
-      'getAuditLogs','getAuditLog'
+      'getAuditLogs','getAuditLog',
+      'getDevices','getDevice','createDevice','updateDevice','enableDevice','disableDevice','deleteDevice'
     ]);
     spy.getEmployees.and.returnValue(of({ items: mockEmployees }));
     spy.getCategories.and.returnValue(of({ items: [] }));
     spy.getPublicSettings.and.returnValue(of({ storeName: 'Test Store', exchangeRate: 15000 }));
     spy.getAuditLogs.and.returnValue(of({ items: [], totalCount: 0, page: 1, pageSize: 50 }));
     spy.getAuditLog.and.returnValue(of({ id: 1, action: 'CREATE', entityType: 'Product', createdAt: '2026-05-20T14:30:12', hasBefore: false, hasAfter: false, hasMetadata: false }));
+    spy.getDevices.and.returnValue(of([]));
+    spy.getDevice.and.returnValue(of({ id: 1, deviceCode: 'POS-01', deviceName: 'Register 1', isActive: true, notes: '', createdAt: '', updatedAt: '' }));
+    spy.createDevice.and.returnValue(of({ id: 1, deviceCode: 'POS-01', deviceName: 'Register 1', isActive: true, notes: '', createdAt: '', updatedAt: '' }));
+    spy.updateDevice.and.returnValue(of({ id: 1, deviceCode: 'POS-01', deviceName: 'Register 1', isActive: true, notes: '', createdAt: '', updatedAt: '' }));
+    spy.enableDevice.and.returnValue(of({ success: true, message: 'Device enabled' }));
+    spy.disableDevice.and.returnValue(of({ success: true, message: 'Device disabled' }));
+    spy.deleteDevice.and.returnValue(of({ success: true, message: 'DEVICE_DELETED' }));
 
     await TestBed.configureTestingModule({
       imports: [SettingsComponent, FormsModule],
@@ -227,5 +235,54 @@ describe('SettingsComponent', () => {
     expect(component.translateAction('CREATE_BACKUP')).toBe('إنشاء نسخة احتياطية');
     expect(component.translateAction('RESET_PASSWORD')).toBe('إعادة تعيين كلمة المرور');
     expect(component.translateAction('UNKNOWN_ACTION')).toBe('UNKNOWN_ACTION');
+  });
+
+  it('should switch to devices tab and load devices list', () => {
+    const mockDevices = [
+      { id: 10, deviceCode: 'POS-10', deviceName: 'Counter 10', isActive: true, createdAt: '2026-05-19T23:00:00' }
+    ];
+    apiSpy.getDevices.and.returnValue(of(mockDevices));
+
+    component.switchTab('devices');
+    expect(component.activeTab).toBe('devices');
+    expect(apiSpy.getDevices).toHaveBeenCalled();
+    expect(component.devices.length).toBe(1);
+    expect(component.devices[0].deviceName).toBe('Counter 10');
+  });
+
+  it('should open create device modal', () => {
+    component.openDeviceCreate();
+    expect(component.activeModal).toBe('deviceCreate');
+    expect(component.editDeviceId).toBeNull();
+    expect(component.deviceForm.deviceCode).toBe('');
+  });
+
+  it('should save new device successfully', () => {
+    component.activeModal = 'deviceCreate';
+    component.deviceForm = { deviceCode: 'POS-NEW', deviceName: 'New POS Register', notes: 'Main area' };
+    
+    component.saveDevice();
+    expect(apiSpy.createDevice).toHaveBeenCalledWith({
+      deviceCode: 'POS-NEW',
+      deviceName: 'New POS Register',
+      notes: 'Main area'
+    });
+  });
+
+  it('should toggle device activation state', () => {
+    const d = { id: 10, deviceCode: 'POS-10', deviceName: 'Counter 10', isActive: true, createdAt: '2026-05-19T23:00:00' };
+    component.toggleDeviceActive(d);
+    expect(apiSpy.disableDevice).toHaveBeenCalledWith(10);
+  });
+
+  it('should delete device or show deactivated toast if used', () => {
+    component.actionDevice = { id: 12, deviceCode: 'POS-12', deviceName: 'Counter 12', isActive: true, createdAt: '2026-05-19' };
+    component.activeModal = 'deviceDelete';
+    
+    // Test physical delete success
+    apiSpy.deleteDevice.and.returnValue(of({ success: true, message: 'DEVICE_DELETED' }));
+    component.confirmDeleteDevice();
+    expect(apiSpy.deleteDevice).toHaveBeenCalledWith(12);
+    expect(component.toast).toBe('تم حذف الجهاز بنجاح');
   });
 });

@@ -3,10 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SettingsApiService } from '../services/settings-api.service';
-import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse } from '../models/settings.model';
+import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, PosDeviceListItem, PosDeviceDetailsResponse } from '../models/settings.model';
 
-type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit';
-type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | null;
+type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit' | 'devices';
+type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | 'deviceCreate' | 'deviceEdit' | 'deviceDelete' | null;
 
 const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings'];
 
@@ -20,6 +20,11 @@ const ERR: Record<string,string> = {
   BACKUP_PATH_NOT_ACCESSIBLE: 'مسار النسخ الاحتياطي غير قابل للكتابة',
   BACKUP_SQL_FAILED: 'فشل تنفيذ النسخ الاحتياطي في SQL Server',
   BACKUP_DIRECTORY_NOT_CONFIGURED: 'مسار النسخ الاحتياطي غير مهيأ',
+  DEVICE_CODE_REQUIRED: 'رمز الجهاز مطلوب',
+  DEVICE_NAME_REQUIRED: 'اسم الجهاز مطلوب',
+  DEVICE_CODE_ALREADY_EXISTS: 'رمز الجهاز هذا مسجل مسبقًا',
+  DEVICE_NOT_FOUND: 'الجهاز غير موجود',
+  CANNOT_DISABLE_LAST_ACTIVE_DEVICE: 'لا يمكن تعطيل الجهاز النشط الوحيد في النظام',
 };
 
 function mapErr(e: HttpErrorResponse): string {
@@ -250,6 +255,54 @@ function mapErr(e: HttpErrorResponse): string {
           </div>
         </div>
       </div>
+
+      <!-- DEVICES TAB -->
+      <div *ngIf="activeTab==='devices'">
+        <div class="flex justify-between items-center mb-4">
+          <p class="text-sm text-slate-500">إدارة الأجهزة ونقاط البيع المصرح لها بالدخول</p>
+          <button (click)="openDeviceCreate()" class="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium">+ إضافة جهاز</button>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <table class="w-full text-sm text-right">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs">
+              <tr>
+                <th class="px-4 py-3">اسم الجهاز</th>
+                <th class="px-4 py-3">رمز الجهاز</th>
+                <th class="px-4 py-3 text-center">الحالة</th>
+                <th class="px-4 py-3">آخر تسجيل دخول</th>
+                <th class="px-4 py-3">ملاحظات</th>
+                <th class="px-4 py-3 text-center">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr *ngIf="!devices.length"><td colspan="6" class="py-8 text-center text-slate-400">لا توجد أجهزة مسجلة</td></tr>
+              <tr *ngFor="let d of devices" class="hover:bg-slate-50">
+                <td class="px-4 py-3 font-medium">{{d.deviceName}}</td>
+                <td class="px-4 py-3 font-mono text-slate-500">
+                  <div class="flex items-center gap-2">
+                    <span>{{d.deviceCode}}</span>
+                    <button (click)="copyDeviceCode(d.deviceCode)" class="text-slate-400 hover:text-primary" title="نسخ الرمز">📋</button>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-center">
+                  <span class="px-2 py-0.5 rounded-full text-xs font-medium" [class.bg-green-100]="d.isActive" [class.text-green-800]="d.isActive" [class.bg-slate-100]="!d.isActive" [class.text-slate-600]="!d.isActive">{{d.isActive?'نشط':'معطّل'}}</span>
+                </td>
+                <td class="px-4 py-3 text-slate-500">{{(d.lastLoginAt | date:'yyyy-MM-dd HH:mm:ss') || '—'}}</td>
+                <td class="px-4 py-3 text-slate-500">{{d.notes||'—'}}</td>
+                <td class="px-4 py-3 text-center">
+                  <div class="flex justify-center gap-2">
+                    <button (click)="openDeviceEdit(d)" class="text-slate-400 hover:text-primary" title="تعديل">✏️</button>
+                    <button (click)="toggleDeviceActive(d)" class="text-slate-400 hover:text-blue-500" [title]="d.isActive?'تعطيل':'تفعيل'">
+                      {{d.isActive?'🚫':'✅'}}
+                    </button>
+                    <button (click)="openDeviceDelete(d)" class="text-slate-400 hover:text-red-600" title="حذف" [disabled]="d.deviceCode==='DEFAULT_DEVICE'">🗑️</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </ng-container>
   </div>
 
@@ -367,6 +420,41 @@ function mapErr(e: HttpErrorResponse): string {
         <button (click)="closeModal()" class="px-4 py-2 bg-primary text-white rounded-md text-sm">إغلاق</button>
       </div>
     </div>
+
+    <!-- Device Create/Edit Modal -->
+    <div *ngIf="activeModal==='deviceCreate'||activeModal==='deviceEdit'" class="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col">
+      <div class="px-5 py-4 border-b border-slate-200 font-bold text-slate-800">{{activeModal==='deviceCreate'?'إضافة جهاز':'تعديل جهاز'}}</div>
+      <div class="p-5 space-y-3 text-sm">
+        <div *ngIf="formErr" class="bg-red-50 text-red-600 p-3 rounded-md">{{formErr}}</div>
+        <div>
+          <label class="block text-slate-600 mb-1">اسم الجهاز *</label>
+          <input type="text" [(ngModel)]="deviceForm.deviceName" placeholder="مثال: كاشير 1" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+        </div>
+        <div *ngIf="activeModal==='deviceCreate'">
+          <label class="block text-slate-600 mb-1">رمز الجهاز (Code) *</label>
+          <input type="text" [(ngModel)]="deviceForm.deviceCode" placeholder="مثال: POS-01" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+          <p class="text-xs text-slate-400 mt-1">يجب أن يكون فريداً وغير قابل للتغيير لاحقاً.</p>
+        </div>
+        <div>
+          <label class="block text-slate-600 mb-1">ملاحظات / موقع الجهاز</label>
+          <textarea [(ngModel)]="deviceForm.notes" placeholder="موقع الجهاز أو أي تفاصيل إضافية..." class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button (click)="closeModal()" class="px-4 py-2 border border-slate-300 rounded-md text-sm text-slate-700">إلغاء</button>
+        <button (click)="saveDevice()" [disabled]="saving||!deviceForm.deviceName" class="px-4 py-2 bg-primary text-white rounded-md text-sm disabled:opacity-50">{{saving?'جاري الحفظ...':'حفظ'}}</button>
+      </div>
+    </div>
+
+    <!-- Device Delete Modal -->
+    <div *ngIf="activeModal==='deviceDelete'" class="bg-white rounded-xl shadow-xl w-full max-w-sm flex flex-col">
+      <div class="px-5 py-4 border-b border-red-100 bg-red-50 font-bold text-red-800">تأكيد حذف الجهاز</div>
+      <div class="p-5 text-sm text-slate-700">هل أنت متأكد من حذف الجهاز "{{actionDevice?.deviceName}}"؟ قد يتم تعطيله بدلاً من الحذف إذا كان يمتلك جلسات بيع سابقة.</div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button (click)="closeModal()" class="px-4 py-2 border border-slate-300 rounded-md text-sm text-slate-700">إلغاء</button>
+        <button (click)="confirmDeleteDevice()" [disabled]="saving" class="px-4 py-2 bg-red-600 text-white rounded-md text-sm disabled:opacity-50">{{saving?'جاري...':'حذف'}}</button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast -->
@@ -383,7 +471,8 @@ export class SettingsComponent implements OnInit {
     { id: 'categories' as TabType, label: 'التصنيفات' },
     { id: 'store' as TabType, label: 'المتجر' },
     { id: 'backup' as TabType, label: 'النسخ الاحتياطي' },
-    { id: 'audit' as TabType, label: 'سجل النشاط' }
+    { id: 'audit' as TabType, label: 'سجل النشاط' },
+    { id: 'devices' as TabType, label: 'الأجهزة' }
   ];
   allScreens = ALL_SCREENS;
   activeTab: TabType = 'employees';
@@ -428,6 +517,12 @@ export class SettingsComponent implements OnInit {
   auditPageSize: number = 50;
   auditTotalCount: number = 0;
 
+  // Device state
+  devices: PosDeviceListItem[] = [];
+  editDeviceId: number | null = null;
+  actionDevice: PosDeviceListItem | null = null;
+  deviceForm: any = {};
+
   constructor(private api: SettingsApiService) {}
 
   ngOnInit() { this.loadTab(); }
@@ -444,6 +539,8 @@ export class SettingsComponent implements OnInit {
       this.api.getPublicSettings().subscribe({ next: r => { this.storeSettings = r; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
     } else if (this.activeTab === 'audit') {
       this.loadAuditLogs();
+    } else if (this.activeTab === 'devices') {
+      this.api.getDevices().subscribe({ next: r => { this.devices = r || []; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
     } else {
       this.loading = false;
     }
@@ -620,7 +717,12 @@ export class SettingsComponent implements OnInit {
       'CREATE': 'إضافة / إنشاء',
       'UPDATE': 'تعديل / تحديث',
       'DELETE': 'حذف',
-      'DEACTIVATE': 'تعطيل'
+      'DEACTIVATE': 'تعطيل',
+      'CREATE_DEVICE': 'إنشاء جهاز',
+      'UPDATE_DEVICE': 'تعديل جهاز',
+      'ENABLE_DEVICE': 'تفعيل جهاز',
+      'DISABLE_DEVICE': 'تعطيل جهاز',
+      'DELETE_DEVICE': 'حذف جهاز'
     };
     return map[action] || action;
   }
@@ -640,6 +742,118 @@ export class SettingsComponent implements OnInit {
     if (next < 1 || (direction > 0 && (next - 1) * this.auditPageSize >= this.auditTotalCount)) return;
     this.auditPage = next;
     this.loadAuditLogs();
+  }
+
+  // --- Device modals and operations ---
+  openDeviceCreate() {
+    this.editDeviceId = null;
+    this.deviceForm = { deviceCode: '', deviceName: '', notes: '' };
+    this.formErr = '';
+    this.activeModal = 'deviceCreate';
+  }
+
+  openDeviceEdit(d: PosDeviceListItem) {
+    this.editDeviceId = d.id;
+    this.actionDevice = d;
+    this.deviceForm = { deviceName: d.deviceName, notes: d.notes || '' };
+    this.formErr = '';
+    this.activeModal = 'deviceEdit';
+  }
+
+  openDeviceDelete(d: PosDeviceListItem) {
+    if (d.deviceCode === 'DEFAULT_DEVICE') {
+      this.showToast('لا يمكن حذف جهاز النظام الافتراضي');
+      return;
+    }
+    this.actionDevice = d;
+    this.activeModal = 'deviceDelete';
+  }
+
+  saveDevice() {
+    this.formErr = '';
+    if (!this.deviceForm.deviceName) {
+      this.formErr = 'اسم الجهاز مطلوب';
+      return;
+    }
+    this.saving = true;
+
+    if (this.activeModal === 'deviceCreate') {
+      if (!this.deviceForm.deviceCode) {
+        this.formErr = 'رمز الجهاز مطلوب';
+        this.saving = false;
+        return;
+      }
+      this.api.createDevice(this.deviceForm).subscribe({
+        next: () => {
+          this.saving = false;
+          this.closeModal();
+          this.loadTab();
+        },
+        error: e => {
+          this.saving = false;
+          this.formErr = mapErr(e);
+        }
+      });
+    } else if (this.editDeviceId) {
+      this.api.updateDevice(this.editDeviceId, {
+        deviceName: this.deviceForm.deviceName,
+        notes: this.deviceForm.notes
+      }).subscribe({
+        next: () => {
+          this.saving = false;
+          this.closeModal();
+          this.loadTab();
+        },
+        error: e => {
+          this.saving = false;
+          this.formErr = mapErr(e);
+        }
+      });
+    }
+  }
+
+  toggleDeviceActive(d: PosDeviceListItem) {
+    this.loading = true;
+    const req = d.isActive ? this.api.disableDevice(d.id) : this.api.enableDevice(d.id);
+    req.subscribe({
+      next: () => {
+        this.loadTab();
+      },
+      error: e => {
+        this.loading = false;
+        this.showToast(mapErr(e));
+      }
+    });
+  }
+
+  confirmDeleteDevice() {
+    if (!this.actionDevice) return;
+    this.saving = true;
+    this.api.deleteDevice(this.actionDevice.id).subscribe({
+      next: r => {
+        this.saving = false;
+        this.closeModal();
+        this.loadTab();
+        if (r.message === 'DEVICE_DEACTIVATED_INSTEAD_OF_DELETED') {
+          this.showToast('تم تعطيل الجهاز بدلاً من حذفه لوجود جلسات مرتبطة به');
+        } else {
+          this.showToast('تم حذف الجهاز بنجاح');
+        }
+      },
+      error: e => {
+        this.saving = false;
+        this.closeModal();
+        this.showToast(mapErr(e));
+      }
+    });
+  }
+
+  copyDeviceCode(code: string) {
+    navigator.clipboard.writeText(code).then(() => {
+      this.showToast('تم نسخ رمز الجهاز إلى الحافظة');
+    }).catch(() => {
+      this.showToast('فشل نسخ رمز الجهاز');
+    });
   }
 
   closeModal() { this.activeModal = null; this.formErr = ''; this.saving = false; }

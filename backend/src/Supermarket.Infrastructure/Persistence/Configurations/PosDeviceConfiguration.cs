@@ -25,13 +25,25 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
             builder.Property(d => d.IsActive)
                 .HasDefaultValue(true);
 
+            builder.Property(d => d.Notes)
+                .HasMaxLength(500)
+                .IsRequired(false);
+
+            builder.Property(d => d.CreatedAt)
+                .IsRequired();
+
+            builder.Property(d => d.UpdatedAt)
+                .IsRequired();
+
             builder.HasData(
                 new PosDevice
                 {
                     Id = 1,
                     DeviceCode = "DEFAULT_DEVICE",
                     DeviceName = "Default POS Device",
-                    IsActive = true
+                    IsActive = true,
+                    CreatedAt = new System.DateTime(2026, 4, 20, 0, 0, 0, System.DateTimeKind.Utc),
+                    UpdatedAt = new System.DateTime(2026, 4, 20, 0, 0, 0, System.DateTimeKind.Utc)
                 }
             );
         }

@@ -136,3 +136,46 @@ export interface AuditLogDetailResponse extends AuditLogListItem {
   userAgent?: string;
 }
 
+// --- POS Devices ---
+export interface PosDeviceListItem {
+  id: number;
+  deviceCode: string;
+  deviceName: string;
+  isActive: boolean;
+  notes?: string;
+  lastLoginAt?: string;
+  createdAt: string;
+}
+
+export interface PosDeviceDetailsResponse {
+  id: number;
+  deviceCode: string;
+  deviceName: string;
+  isActive: boolean;
+  notes?: string;
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePosDeviceRequest {
+  deviceCode: string;
+  deviceName: string;
+  notes?: string;
+}
+
+export interface UpdatePosDeviceRequest {
+  deviceName: string;
+  notes?: string;
+}
+
+export interface DeletePosDeviceResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface EnableDisablePosDeviceResponse {
+  success: boolean;
+  message: string;
+}
+

@@ -9,7 +9,10 @@ import {
   CategoryListResponse, CategoryItem,
   CreateCategoryRequest, UpdateCategoryRequest, DeleteCategoryResponse,
   PublicSettingsResponse, CreateBackupResponse,
-  AuditLogListResponse, AuditLogDetailResponse
+  AuditLogListResponse, AuditLogDetailResponse,
+  PosDeviceListItem, PosDeviceDetailsResponse,
+  CreatePosDeviceRequest, UpdatePosDeviceRequest,
+  DeletePosDeviceResponse, EnableDisablePosDeviceResponse
 } from '../models/settings.model';
 
 @Injectable({ providedIn: 'root' })
@@ -19,6 +22,7 @@ export class SettingsApiService {
   private readonly pub = `${environment.apiUrl}/api/settings/public`;
   private readonly backup = `${environment.apiUrl}/api/system/backup`;
   private readonly audit = `${environment.apiUrl}/api/audit-logs`;
+  private readonly dev = `${environment.apiUrl}/api/devices`;
 
   constructor(private http: HttpClient) {}
 
@@ -80,5 +84,34 @@ export class SettingsApiService {
 
   getAuditLog(id: number): Observable<AuditLogDetailResponse> {
     return this.http.get<AuditLogDetailResponse>(`${this.audit}/${id}`);
+  }
+
+  // --- POS Devices ---
+  getDevices(): Observable<PosDeviceListItem[]> {
+    return this.http.get<PosDeviceListItem[]>(this.dev);
+  }
+
+  getDevice(id: number): Observable<PosDeviceDetailsResponse> {
+    return this.http.get<PosDeviceDetailsResponse>(`${this.dev}/${id}`);
+  }
+
+  createDevice(req: CreatePosDeviceRequest): Observable<PosDeviceDetailsResponse> {
+    return this.http.post<PosDeviceDetailsResponse>(this.dev, req);
+  }
+
+  updateDevice(id: number, req: UpdatePosDeviceRequest): Observable<PosDeviceDetailsResponse> {
+    return this.http.put<PosDeviceDetailsResponse>(`${this.dev}/${id}`, req);
+  }
+
+  enableDevice(id: number): Observable<EnableDisablePosDeviceResponse> {
+    return this.http.post<EnableDisablePosDeviceResponse>(`${this.dev}/${id}/enable`, {});
+  }
+
+  disableDevice(id: number): Observable<EnableDisablePosDeviceResponse> {
+    return this.http.post<EnableDisablePosDeviceResponse>(`${this.dev}/${id}/disable`, {});
+  }
+
+  deleteDevice(id: number): Observable<DeletePosDeviceResponse> {
+    return this.http.delete<DeletePosDeviceResponse>(`${this.dev}/${id}`);
   }
 }

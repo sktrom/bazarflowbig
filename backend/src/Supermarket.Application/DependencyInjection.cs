@@ -3,6 +3,8 @@ using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.Auth.Services;
 using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.AuditLogs.Services;
+using Supermarket.Application.Devices.Interfaces;
+using Supermarket.Application.Devices.Services;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Application.Common.Services;
 using Supermarket.Application.Sessions.Interfaces;
@@ -50,6 +52,7 @@ namespace Supermarket.Application
             // Application services only — NO EF / DbContext / Infrastructure types here
             services.AddScoped<IAuditLogService, AuditLogService>();
             services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
+            services.AddScoped<IDeviceService, DeviceService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<ISessionService, SessionService>();
