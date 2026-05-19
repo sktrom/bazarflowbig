@@ -23,5 +23,6 @@ namespace Supermarket.Application.InventoryQueries.Interfaces
         Task<List<(Product Product, decimal TotalQuantityAvailable)>> GetProductsWithStockLevelsAsync();
         Task<List<(ProductBatch Batch, Product Product)>> GetBatchesWithExpiryAsync();
         Task<List<long>> GetProductsWithZeroSalesLast30DaysAsync();
+        Task<Dictionary<long, decimal>> GetSoldQuantitiesLast30DaysAsync(DateTime fromUtc);
     }
 }

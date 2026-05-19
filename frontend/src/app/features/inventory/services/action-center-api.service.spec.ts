@@ -31,7 +31,8 @@ describe('ActionCenterApiService', () => {
         expiredBatchesCount: 3,
         expiringSoonBatchesCount: 4,
         inactiveWithStockCount: 5,
-        offerCandidatesCount: 6
+        offerCandidatesCount: 6,
+        restockSuggestionsCount: 7
       },
       topUrgentActions: [],
       outOfStock: [],
@@ -39,7 +40,8 @@ describe('ActionCenterApiService', () => {
       expiringSoon: [],
       expired: [],
       inactiveWithStock: [],
-      offerCandidates: []
+      offerCandidates: [],
+      restockSuggestions: []
     };
 
     service.getActionCenterSummary().subscribe((res) => {

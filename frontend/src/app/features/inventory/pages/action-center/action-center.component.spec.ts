@@ -18,7 +18,8 @@ describe('ActionCenterComponent', () => {
       expiredBatchesCount: 0,
       expiringSoonBatchesCount: 0,
       inactiveWithStockCount: 0,
-      offerCandidatesCount: 0
+      offerCandidatesCount: 0,
+      restockSuggestionsCount: 0
     },
     topUrgentActions: [
       { type: 'OUT_OF_STOCK', severity: 'HIGH', productId: 1, productName: 'P1', barcode: '123', message: 'Empty', recommendedAction: 'Restock' }
@@ -30,7 +31,8 @@ describe('ActionCenterComponent', () => {
     expired: [],
     expiringSoon: [],
     inactiveWithStock: [],
-    offerCandidates: []
+    offerCandidates: [],
+    restockSuggestions: []
   };
 
   beforeEach(async () => {
@@ -180,5 +182,96 @@ describe('ActionCenterComponent', () => {
     expect(routerSpy.navigate).toHaveBeenCalledWith(['/products'], {
       queryParams: { productId: 7 }
     });
+  });
+
+  it('should show restock suggestions summary card count', () => {
+    const data: ActionCenterResponseDto = {
+      ...mockData,
+      summary: { ...mockData.summary, outOfStockCount: 0, restockSuggestionsCount: 1 },
+      outOfStock: [],
+      restockSuggestions: [{
+        productId: 8,
+        productName: 'Restock P',
+        barcode: '888',
+        currentStock: 2,
+        soldLast30Days: 30,
+        avgDailySales: 1,
+        daysRemaining: 2,
+        suggestedQty: 12,
+        confidence: 'High',
+        recommendationType: 'BuyNow',
+        recommendedAction: 'شراء الآن'
+      }]
+    };
+    apiServiceSpy.getActionCenterSummary.and.returnValue(of(data));
+    fixture = TestBed.createComponent(ActionCenterComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('اقتراحات إعادة الطلب');
+    expect(component.activeTab).toBe('restock');
+  });
+
+  it('should render restock suggestions', () => {
+    const data: ActionCenterResponseDto = {
+      ...mockData,
+      summary: { ...mockData.summary, outOfStockCount: 0, restockSuggestionsCount: 1 },
+      outOfStock: [],
+      restockSuggestions: [{
+        productId: 8,
+        productName: 'Restock P',
+        barcode: '888',
+        currentStock: 2,
+        soldLast30Days: 30,
+        avgDailySales: 1,
+        daysRemaining: 2,
+        suggestedQty: 12,
+        confidence: 'High',
+        recommendationType: 'BuyNow',
+        recommendedAction: 'شراء الآن'
+      }]
+    };
+    apiServiceSpy.getActionCenterSummary.and.returnValue(of(data));
+    fixture = TestBed.createComponent(ActionCenterComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.textContent).toContain('Restock P');
+    expect(compiled.textContent).toContain('مبيعات آخر 30 يوم');
+    expect(compiled.textContent).toContain('12');
+  });
+
+  it('should display empty state for restock suggestions', () => {
+    apiServiceSpy.getActionCenterSummary.and.returnValue(of({ ...mockData, topUrgentActions: [] }));
+    fixture = TestBed.createComponent(ActionCenterComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+
+    component.activeTab = 'restock';
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('لا توجد سجلات في هذه القائمة.');
+  });
+
+  it('should display restock confidence badge', () => {
+    apiServiceSpy.getActionCenterSummary.and.returnValue(of(mockData));
+    fixture = TestBed.createComponent(ActionCenterComponent);
+    component = fixture.componentInstance;
+
+    expect(component.getConfidenceLabel('High')).toBe('عالية');
+    expect(component.getConfidenceClass('High')).toContain('green');
+  });
+
+  it('should display restock recommendation type', () => {
+    apiServiceSpy.getActionCenterSummary.and.returnValue(of(mockData));
+    fixture = TestBed.createComponent(ActionCenterComponent);
+    component = fixture.componentInstance;
+
+    expect(component.getRecommendationLabel('BuyNow')).toBe('شراء الآن');
+    expect(component.getRecommendationLabel('Watch')).toBe('راقب');
+    expect(component.getRecommendationLabel('SlowMoving')).toBe('بطيء الحركة');
+    expect(component.getRecommendationLabel('LowConfidence')).toBe('بيانات غير كافية');
   });
 });

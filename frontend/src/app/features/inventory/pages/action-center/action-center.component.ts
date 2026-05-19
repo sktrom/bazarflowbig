@@ -30,7 +30,7 @@ import { finalize } from 'rxjs';
       <div *ngIf="!isLoading && data">
         
         <!-- Summary Cards -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
           
           <div class="bg-red-50 border border-red-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" (click)="activeTab = 'outOfStock'">
             <div class="text-3xl font-bold text-red-600 mb-1">{{ data.summary.outOfStockCount }}</div>
@@ -60,6 +60,11 @@ import { finalize } from 'rxjs';
           <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" (click)="activeTab = 'offers'">
             <div class="text-3xl font-bold text-blue-600 mb-1">{{ data.summary.offerCandidatesCount }}</div>
             <div class="text-sm font-medium text-blue-800">مرشح لعرض</div>
+          </div>
+
+          <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" (click)="activeTab = 'restock'">
+            <div class="text-3xl font-bold text-emerald-600 mb-1">{{ data.summary.restockSuggestionsCount }}</div>
+            <div class="text-sm font-medium text-emerald-800">اقتراحات إعادة الطلب</div>
           </div>
 
         </div>
@@ -138,6 +143,11 @@ import { finalize } from 'rxjs';
                     (click)="activeTab = 'offers'">
               عروض مرشحة ({{ data.offerCandidates.length }})
             </button>
+            <button class="px-6 py-3 text-sm font-medium whitespace-nowrap focus:outline-none"
+                    [ngClass]="{'text-blue-600 border-b-2 border-blue-600 bg-white': activeTab === 'restock', 'text-gray-600 hover:text-gray-800': activeTab !== 'restock'}"
+                    (click)="activeTab = 'restock'">
+              إعادة الطلب ({{ data.restockSuggestions.length }})
+            </button>
           </div>
 
           <div class="p-0">
@@ -149,12 +159,18 @@ import { finalize } from 'rxjs';
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الباركود</th>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المخزون الحالي</th>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'expired' || activeTab === 'expiringSoon'">تاريخ الانتهاء</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'restock'">مبيعات آخر 30 يوم</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'restock'">متوسط البيع اليومي</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'restock'">الأيام المتبقية</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'restock'">الكمية المقترحة</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'restock'">الثقة</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'restock'">التوصية</th>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                   <tr *ngIf="getActiveList().length === 0">
-                    <td colspan="5" class="px-6 py-8 text-center text-gray-500">لا توجد سجلات في هذه القائمة.</td>
+                    <td colspan="10" class="px-6 py-8 text-center text-gray-500">لا توجد سجلات في هذه القائمة.</td>
                   </tr>
                   <tr *ngFor="let item of getActiveList()" class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.productName }}</td>
@@ -167,6 +183,22 @@ import { finalize } from 'rxjs';
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" *ngIf="activeTab === 'expired' || activeTab === 'expiringSoon'">
                       <span [ngClass]="{'text-red-600 font-bold': activeTab === 'expired'}">
                         {{ getAsBatch(item).expiryDate | date:'yyyy-MM-dd' }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" *ngIf="activeTab === 'restock'">{{ getAsRestock(item).soldLast30Days | number:'1.0-2' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" *ngIf="activeTab === 'restock'">{{ getAsRestock(item).avgDailySales | number:'1.0-2' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700" *ngIf="activeTab === 'restock'">
+                      {{ getAsRestock(item).daysRemaining === null || getAsRestock(item).daysRemaining === undefined ? '—' : (getAsRestock(item).daysRemaining | number:'1.0-1') }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900" *ngIf="activeTab === 'restock'">{{ getAsRestock(item).suggestedQty | number:'1.0-0' }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm" *ngIf="activeTab === 'restock'">
+                      <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" [ngClass]="getConfidenceClass(getAsRestock(item).confidence)">
+                        {{ getConfidenceLabel(getAsRestock(item).confidence) }}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm" *ngIf="activeTab === 'restock'">
+                      <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full" [ngClass]="getRecommendationClass(getAsRestock(item).recommendationType)">
+                        {{ getRecommendationLabel(getAsRestock(item).recommendationType) }}
                       </span>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm">
@@ -183,7 +215,7 @@ import { finalize } from 'rxjs';
                                 (click)="openProduct(item)">
                           {{ getProductActionLabel() }}
                         </button>
-                        <button *ngIf="canOpenInventory()"
+                        <button *ngIf="canOpenInventory(item)"
                                 type="button"
                                 class="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors text-xs font-bold"
                                 (click)="openInventory(item)">
@@ -209,7 +241,7 @@ export class ActionCenterComponent implements OnInit {
   errorMessage = '';
   data: ActionCenterResponseDto | null = null;
   
-  activeTab: 'outOfStock' | 'lowStock' | 'expired' | 'expiringSoon' | 'inactive' | 'offers' = 'outOfStock';
+  activeTab: 'outOfStock' | 'lowStock' | 'expired' | 'expiringSoon' | 'inactive' | 'offers' | 'restock' = 'outOfStock';
 
   ngOnInit(): void {
     this.loadData();
@@ -230,6 +262,7 @@ export class ActionCenterComponent implements OnInit {
           else if (res.expired.length > 0) this.activeTab = 'expired';
           else if (res.expiringSoon.length > 0) this.activeTab = 'expiringSoon';
           else if (res.lowStock.length > 0) this.activeTab = 'lowStock';
+          else if (res.restockSuggestions.length > 0) this.activeTab = 'restock';
         },
         error: (err) => {
           this.errorMessage = 'حدث خطأ أثناء تحميل بيانات مركز القرارات. يرجى المحاولة مرة أخرى.';
@@ -248,6 +281,7 @@ export class ActionCenterComponent implements OnInit {
       case 'expiringSoon': return this.data.expiringSoon;
       case 'inactive': return this.data.inactiveWithStock;
       case 'offers': return this.data.offerCandidates;
+      case 'restock': return this.data.restockSuggestions;
       default: return [];
     }
   }
@@ -256,11 +290,21 @@ export class ActionCenterComponent implements OnInit {
     return item;
   }
 
+  getAsRestock(item: any): any {
+    return item;
+  }
+
   canCreateOffer(): boolean {
     return this.activeTab === 'expiringSoon' || this.activeTab === 'offers';
   }
 
-  canOpenInventory(): boolean {
+  canOpenInventory(item?: ProductActionItemDto): boolean {
+    if (this.activeTab === 'restock') {
+      if (!item) return false;
+      const recommendationType = this.getAsRestock(item).recommendationType;
+      return recommendationType === 'BuyNow' || recommendationType === 'Watch';
+    }
+
     return this.activeTab === 'outOfStock' ||
       this.activeTab === 'lowStock' ||
       this.activeTab === 'expired' ||
@@ -271,11 +315,50 @@ export class ActionCenterComponent implements OnInit {
     return this.activeTab === 'outOfStock' ||
       this.activeTab === 'lowStock' ||
       this.activeTab === 'inactive' ||
-      this.activeTab === 'offers';
+      this.activeTab === 'offers' ||
+      this.activeTab === 'restock';
   }
 
   getProductActionLabel(): string {
     return this.activeTab === 'inactive' ? 'فتح المنتج للمراجعة' : 'فتح المنتج';
+  }
+
+  getConfidenceLabel(confidence: string): string {
+    switch (confidence) {
+      case 'High': return 'عالية';
+      case 'Medium': return 'متوسطة';
+      case 'Low': return 'منخفضة';
+      default: return confidence;
+    }
+  }
+
+  getConfidenceClass(confidence: string): string {
+    switch (confidence) {
+      case 'High': return 'bg-green-100 text-green-800';
+      case 'Medium': return 'bg-yellow-100 text-yellow-800';
+      case 'Low': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  }
+
+  getRecommendationLabel(recommendationType: string): string {
+    switch (recommendationType) {
+      case 'BuyNow': return 'شراء الآن';
+      case 'Watch': return 'راقب';
+      case 'SlowMoving': return 'بطيء الحركة';
+      case 'LowConfidence': return 'بيانات غير كافية';
+      default: return recommendationType;
+    }
+  }
+
+  getRecommendationClass(recommendationType: string): string {
+    switch (recommendationType) {
+      case 'BuyNow': return 'bg-red-100 text-red-800';
+      case 'Watch': return 'bg-orange-100 text-orange-800';
+      case 'SlowMoving': return 'bg-blue-100 text-blue-800';
+      case 'LowConfidence': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   }
 
   createOffer(item: ProductActionItemDto): void {

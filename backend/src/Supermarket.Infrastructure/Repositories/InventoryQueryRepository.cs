@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Supermarket.Application.InventoryQueries.Interfaces;
 using Supermarket.Domain.Entities;
+using Supermarket.Domain.Enums;
 using Supermarket.Infrastructure.Persistence;
 
 namespace Supermarket.Infrastructure.Repositories
@@ -123,6 +124,19 @@ namespace Supermarket.Infrastructure.Repositories
                 .Select(p => p.Id);
 
             return await query.ToListAsync();
+        }
+
+        public async Task<Dictionary<long, decimal>> GetSoldQuantitiesLast30DaysAsync(DateTime fromUtc)
+        {
+            return await _context.InvoiceLines
+                .Where(il => il.Invoice != null &&
+                    il.Invoice.CreatedAt >= fromUtc &&
+                    il.Invoice.Status != InvoiceStatus.Working &&
+                    il.Invoice.Status != InvoiceStatus.Suspended &&
+                    il.Invoice.Status != InvoiceStatus.Cancelled)
+                .GroupBy(il => il.ProductId)
+                .Select(g => new { ProductId = g.Key, SoldQuantity = g.Sum(x => x.Quantity) })
+                .ToDictionaryAsync(x => x.ProductId, x => x.SoldQuantity);
         }
     }
 }

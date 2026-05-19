@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Supermarket.Application.CartFinalization.Interfaces;
 using Supermarket.Application.InventoryQueries.Interfaces;
 using Supermarket.Contracts.InventoryQueries;
+using Supermarket.Domain.Entities;
 
 namespace Supermarket.Application.InventoryQueries.Services
 {
@@ -32,6 +33,7 @@ namespace Supermarket.Application.InventoryQueries.Services
 
             var today = DateTime.UtcNow.Date;
             var expiryThresholdDate = today.AddDays((double)expiryAlertDays);
+            var soldQuantitiesLast30Days = await _repository.GetSoldQuantitiesLast30DaysAsync(DateTime.UtcNow.AddDays(-30));
 
             // Populate Details
             foreach (var item in productsWithStock)
@@ -60,6 +62,13 @@ namespace Supermarket.Application.InventoryQueries.Services
                             Barcode = p.Barcode,
                             CurrentStock = stock
                         });
+                    }
+
+                    var soldLast30Days = soldQuantitiesLast30Days.TryGetValue(p.Id, out var soldQty) ? soldQty : 0m;
+                    var restockSuggestion = BuildRestockSuggestion(p, stock, soldLast30Days);
+                    if (restockSuggestion != null)
+                    {
+                        response.RestockSuggestions.Add(restockSuggestion);
                     }
                 }
                 else
@@ -145,6 +154,7 @@ namespace Supermarket.Application.InventoryQueries.Services
             response.Summary.ExpiringSoonBatchesCount = response.ExpiringSoon.Count;
             response.Summary.InactiveWithStockCount = response.InactiveWithStock.Count;
             response.Summary.OfferCandidatesCount = response.OfferCandidates.Count;
+            response.Summary.RestockSuggestionsCount = response.RestockSuggestions.Count;
 
             // Generate Top Urgent Actions
             var allUrgentActions = new List<TopUrgentActionDto>();
@@ -175,6 +185,21 @@ namespace Supermarket.Application.InventoryQueries.Services
                     ProductName = item.ProductName,
                     Barcode = item.Barcode,
                     Message = "نفذت الكمية بالكامل",
+                    RecommendedAction = "إعادة طلب فورية"
+                });
+            }
+
+            // HIGH: Restock Buy Now
+            foreach (var item in response.RestockSuggestions.Where(x => x.RecommendationType == "BuyNow"))
+            {
+                allUrgentActions.Add(new TopUrgentActionDto
+                {
+                    Type = "RESTOCK_BUY_NOW",
+                    Severity = "HIGH",
+                    ProductId = item.ProductId,
+                    ProductName = item.ProductName,
+                    Barcode = item.Barcode,
+                    Message = $"اقتراح إعادة طلب فورية (الكمية المقترحة: {item.SuggestedQty})",
                     RecommendedAction = "إعادة طلب فورية"
                 });
             }
@@ -216,6 +241,68 @@ namespace Supermarket.Application.InventoryQueries.Services
                 .ToList();
 
             return response;
+        }
+
+        private static RestockSuggestionDto? BuildRestockSuggestion(Product product, decimal currentStock, decimal soldLast30Days)
+        {
+            var avgDailySales = soldLast30Days / 30m;
+            decimal? daysRemaining = null;
+            var suggestedQty = 0m;
+            var confidence = soldLast30Days >= 10m ? "High" : soldLast30Days > 0m ? "Medium" : "Low";
+            string? recommendationType = null;
+
+            if (avgDailySales > 0m)
+            {
+                daysRemaining = currentStock / avgDailySales;
+                suggestedQty = Math.Ceiling(Math.Max(0m, (avgDailySales * 14m) - currentStock));
+            }
+
+            if (currentStock == 0m && soldLast30Days > 0m)
+            {
+                recommendationType = "BuyNow";
+            }
+            else if (avgDailySales > 0m && daysRemaining.HasValue && daysRemaining.Value <= 3m)
+            {
+                recommendationType = "BuyNow";
+            }
+            else if (avgDailySales > 0m && daysRemaining.HasValue && daysRemaining.Value <= 7m)
+            {
+                recommendationType = "Watch";
+            }
+            else if (currentStock > 0m && soldLast30Days == 0m)
+            {
+                recommendationType = "SlowMoving";
+            }
+            else if (currentStock == 0m && soldLast30Days == 0m)
+            {
+                recommendationType = "LowConfidence";
+            }
+
+            if (recommendationType == null)
+            {
+                return null;
+            }
+
+            return new RestockSuggestionDto
+            {
+                ProductId = product.Id,
+                ProductName = product.Name,
+                Barcode = product.Barcode,
+                CurrentStock = currentStock,
+                SoldLast30Days = soldLast30Days,
+                AvgDailySales = avgDailySales,
+                DaysRemaining = daysRemaining,
+                SuggestedQty = suggestedQty,
+                Confidence = confidence,
+                RecommendationType = recommendationType,
+                RecommendedAction = recommendationType switch
+                {
+                    "BuyNow" => "شراء الآن",
+                    "Watch" => "راقب المخزون",
+                    "SlowMoving" => "بطيء الحركة",
+                    _ => "بيانات غير كافية"
+                }
+            };
         }
     }
 }

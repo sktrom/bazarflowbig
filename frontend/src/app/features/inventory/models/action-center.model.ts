@@ -5,6 +5,7 @@ export interface ActionCenterSummaryDto {
   expiringSoonBatchesCount: number;
   inactiveWithStockCount: number;
   offerCandidatesCount: number;
+  restockSuggestionsCount: number;
 }
 
 export interface TopUrgentActionDto {
@@ -29,6 +30,16 @@ export interface BatchActionItemDto extends ProductActionItemDto {
   expiryDate?: string;
 }
 
+export interface RestockSuggestionDto extends ProductActionItemDto {
+  soldLast30Days: number;
+  avgDailySales: number;
+  daysRemaining?: number | null;
+  suggestedQty: number;
+  confidence: string;
+  recommendationType: string;
+  recommendedAction: string;
+}
+
 export interface ActionCenterResponseDto {
   summary: ActionCenterSummaryDto;
   topUrgentActions: TopUrgentActionDto[];
@@ -38,4 +49,5 @@ export interface ActionCenterResponseDto {
   expired: BatchActionItemDto[];
   inactiveWithStock: ProductActionItemDto[];
   offerCandidates: ProductActionItemDto[];
+  restockSuggestions: RestockSuggestionDto[];
 }

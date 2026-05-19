@@ -24,6 +24,8 @@ namespace Supermarket.UnitTests.InventoryQueries
 
             _mockSettings.Setup(s => s.GetRequiredDecimalAsync("stock_alert_threshold")).ReturnsAsync(10m);
             _mockSettings.Setup(s => s.GetRequiredDecimalAsync("expiry_alert_days")).ReturnsAsync(30m);
+            _mockRepo.Setup(r => r.GetSoldQuantitiesLast30DaysAsync(It.IsAny<DateTime>()))
+                .ReturnsAsync(new Dictionary<long, decimal>());
 
             _service = new ActionCenterService(_mockRepo.Object, _mockSettings.Object);
         }
@@ -183,6 +185,105 @@ namespace Supermarket.UnitTests.InventoryQueries
             Assert.True(result.TopUrgentActions.Count >= 2);
             Assert.Equal("HIGH",   result.TopUrgentActions[0].Severity);
             Assert.Equal("MEDIUM", result.TopUrgentActions[1].Severity);
+        }
+
+        [Fact]
+        public async Task GetActionCenterSummaryAsync_RestockZeroStockWithSalesShouldBeBuyNow()
+        {
+            var product = new Product { Id = 1, Name = "Fast P", Barcode = "FAST", IsActive = true };
+            _mockRepo.Setup(r => r.GetProductsWithStockLevelsAsync())
+                .ReturnsAsync(new List<(Product, decimal)> { (product, 0m) });
+            _mockRepo.Setup(r => r.GetBatchesWithExpiryAsync()).ReturnsAsync(new List<(ProductBatch, Product)>());
+            _mockRepo.Setup(r => r.GetProductsWithZeroSalesLast30DaysAsync()).ReturnsAsync(new List<long>());
+            _mockRepo.Setup(r => r.GetSoldQuantitiesLast30DaysAsync(It.IsAny<DateTime>()))
+                .ReturnsAsync(new Dictionary<long, decimal> { [1] = 12m });
+
+            var result = await _service.GetActionCenterSummaryAsync();
+
+            var suggestion = Assert.Single(result.RestockSuggestions);
+            Assert.Equal("BuyNow", suggestion.RecommendationType);
+            Assert.Equal("High", suggestion.Confidence);
+            Assert.Equal(6m, suggestion.SuggestedQty);
+            Assert.Contains(result.TopUrgentActions, a => a.Type == "RESTOCK_BUY_NOW" && a.Severity == "HIGH");
+        }
+
+        [Fact]
+        public async Task GetActionCenterSummaryAsync_RestockDaysRemainingAtMost3ShouldBeBuyNow()
+        {
+            var product = new Product { Id = 2, Name = "Urgent P", Barcode = "URG", IsActive = true };
+            _mockRepo.Setup(r => r.GetProductsWithStockLevelsAsync())
+                .ReturnsAsync(new List<(Product, decimal)> { (product, 2m) });
+            _mockRepo.Setup(r => r.GetBatchesWithExpiryAsync()).ReturnsAsync(new List<(ProductBatch, Product)>());
+            _mockRepo.Setup(r => r.GetProductsWithZeroSalesLast30DaysAsync()).ReturnsAsync(new List<long>());
+            _mockRepo.Setup(r => r.GetSoldQuantitiesLast30DaysAsync(It.IsAny<DateTime>()))
+                .ReturnsAsync(new Dictionary<long, decimal> { [2] = 30m });
+
+            var result = await _service.GetActionCenterSummaryAsync();
+
+            var suggestion = Assert.Single(result.RestockSuggestions);
+            Assert.Equal("BuyNow", suggestion.RecommendationType);
+            Assert.Equal(2m, suggestion.DaysRemaining);
+            Assert.Equal(12m, suggestion.SuggestedQty);
+        }
+
+        [Fact]
+        public async Task GetActionCenterSummaryAsync_RestockDaysRemainingAtMost7ShouldBeWatch()
+        {
+            var product = new Product { Id = 3, Name = "Watch P", Barcode = "WCH", IsActive = true };
+            _mockRepo.Setup(r => r.GetProductsWithStockLevelsAsync())
+                .ReturnsAsync(new List<(Product, decimal)> { (product, 5m) });
+            _mockRepo.Setup(r => r.GetBatchesWithExpiryAsync()).ReturnsAsync(new List<(ProductBatch, Product)>());
+            _mockRepo.Setup(r => r.GetProductsWithZeroSalesLast30DaysAsync()).ReturnsAsync(new List<long>());
+            _mockRepo.Setup(r => r.GetSoldQuantitiesLast30DaysAsync(It.IsAny<DateTime>()))
+                .ReturnsAsync(new Dictionary<long, decimal> { [3] = 30m });
+
+            var result = await _service.GetActionCenterSummaryAsync();
+
+            var suggestion = Assert.Single(result.RestockSuggestions);
+            Assert.Equal("Watch", suggestion.RecommendationType);
+            Assert.Equal(5m, suggestion.DaysRemaining);
+            Assert.Equal(9m, suggestion.SuggestedQty);
+        }
+
+        [Fact]
+        public async Task GetActionCenterSummaryAsync_RestockStockWithZeroSalesShouldBeSlowMoving()
+        {
+            var product = new Product { Id = 4, Name = "Slow P", Barcode = "SLOW", IsActive = true };
+            _mockRepo.Setup(r => r.GetProductsWithStockLevelsAsync())
+                .ReturnsAsync(new List<(Product, decimal)> { (product, 20m) });
+            _mockRepo.Setup(r => r.GetBatchesWithExpiryAsync()).ReturnsAsync(new List<(ProductBatch, Product)>());
+            _mockRepo.Setup(r => r.GetProductsWithZeroSalesLast30DaysAsync()).ReturnsAsync(new List<long> { 4L });
+
+            var result = await _service.GetActionCenterSummaryAsync();
+
+            var suggestion = Assert.Single(result.RestockSuggestions);
+            Assert.Equal("SlowMoving", suggestion.RecommendationType);
+            Assert.Equal("Low", suggestion.Confidence);
+            Assert.Null(suggestion.DaysRemaining);
+            Assert.Equal(0m, suggestion.SuggestedQty);
+        }
+
+        [Fact]
+        public async Task GetActionCenterSummaryAsync_RestockShouldCalculateSuggestedQtyAndConfidence()
+        {
+            var high = new Product { Id = 5, Name = "High P", Barcode = "HIGH", IsActive = true };
+            var medium = new Product { Id = 6, Name = "Medium P", Barcode = "MED", IsActive = true };
+            var low = new Product { Id = 7, Name = "Low P", Barcode = "LOW", IsActive = true };
+            _mockRepo.Setup(r => r.GetProductsWithStockLevelsAsync())
+                .ReturnsAsync(new List<(Product, decimal)> { (high, 2m), (medium, 1m), (low, 10m) });
+            _mockRepo.Setup(r => r.GetBatchesWithExpiryAsync()).ReturnsAsync(new List<(ProductBatch, Product)>());
+            _mockRepo.Setup(r => r.GetProductsWithZeroSalesLast30DaysAsync()).ReturnsAsync(new List<long> { 7L });
+            _mockRepo.Setup(r => r.GetSoldQuantitiesLast30DaysAsync(It.IsAny<DateTime>()))
+                .ReturnsAsync(new Dictionary<long, decimal> { [5] = 15m, [6] = 6m });
+
+            var result = await _service.GetActionCenterSummaryAsync();
+
+            Assert.Equal(3, result.RestockSuggestions.Count);
+            Assert.Equal("High", result.RestockSuggestions.Single(x => x.ProductId == 5).Confidence);
+            Assert.Equal(5m, result.RestockSuggestions.Single(x => x.ProductId == 5).SuggestedQty);
+            Assert.Equal("Medium", result.RestockSuggestions.Single(x => x.ProductId == 6).Confidence);
+            Assert.Equal(2m, result.RestockSuggestions.Single(x => x.ProductId == 6).SuggestedQty);
+            Assert.Equal("Low", result.RestockSuggestions.Single(x => x.ProductId == 7).Confidence);
         }
     }
 }
