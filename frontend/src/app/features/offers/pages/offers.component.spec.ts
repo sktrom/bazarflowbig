@@ -4,19 +4,24 @@ import { OffersApiService } from '../services/offers-api.service';
 import { of, throwError } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse, HttpResponse, HttpHeaders } from '@angular/common/http';
+import { ActivatedRoute, convertToParamMap, ParamMap } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
 
 describe('OffersComponent', () => {
   let component: OffersComponent;
   let fixture: ComponentFixture<OffersComponent>;
   let apiSpy: jasmine.SpyObj<OffersApiService>;
+  let queryParamMap$: BehaviorSubject<ParamMap>;
 
   beforeEach(async () => {
-    const spy = jasmine.createSpyObj('OffersApiService', ['getAll', 'create', 'update', 'cancel', 'delete', 'exportOffers', 'productsLookup']);
+    const spy = jasmine.createSpyObj('OffersApiService', ['getAll', 'create', 'update', 'cancel', 'delete', 'exportOffers', 'productsLookup', 'getProductLookupItem']);
+    queryParamMap$ = new BehaviorSubject(convertToParamMap({}));
 
     await TestBed.configureTestingModule({
       imports: [OffersComponent, FormsModule],
       providers: [
-        { provide: OffersApiService, useValue: spy }
+        { provide: OffersApiService, useValue: spy },
+        { provide: ActivatedRoute, useValue: { queryParamMap: queryParamMap$.asObservable() } }
       ]
     }).compileComponents();
 
@@ -26,6 +31,7 @@ describe('OffersComponent', () => {
   beforeEach(() => {
     apiSpy.getAll.and.returnValue(of({ items: [] }));
     apiSpy.productsLookup.and.returnValue(of({ items: [] }));
+    apiSpy.getProductLookupItem.and.returnValue(of({ items: [] }));
     fixture = TestBed.createComponent(OffersComponent);
     component = fixture.componentInstance;
   });
@@ -128,5 +134,74 @@ describe('OffersComponent', () => {
     component.clearSelectedProduct();
     expect(component.selectedProduct).toBeNull();
     expect(component.formData.productId).toBeNull();
+  });
+
+  it('should open create modal automatically from action center query params', () => {
+    queryParamMap$.next(convertToParamMap({ action: 'create', productId: '2', source: 'action-center' }));
+    apiSpy.getProductLookupItem.and.returnValue(of({
+      items: [{ productId: 2, name: 'حليب', barcode: '222', priceUsd: 1.5 }]
+    }));
+
+    fixture.detectChanges();
+
+    expect(component.activeModal).toBe('form');
+    expect(component.editId).toBeNull();
+    expect(component.formData.productId).toBe(2);
+    expect(apiSpy.getProductLookupItem).toHaveBeenCalledWith(2);
+  });
+
+  it('should select product after action center lookup', () => {
+    queryParamMap$.next(convertToParamMap({ action: 'create', productId: '2', source: 'action-center' }));
+    const product = { productId: 2, name: 'حليب', barcode: '222', priceUsd: 1.5 };
+    apiSpy.getProductLookupItem.and.returnValue(of({ items: [product] }));
+
+    fixture.detectChanges();
+
+    expect(component.selectedProduct).toEqual(product);
+    expect(component.formData.productId).toBe(2);
+  });
+
+  it('should show action center suggestion note', () => {
+    queryParamMap$.next(convertToParamMap({ action: 'create', productId: '2', source: 'action-center' }));
+    apiSpy.getProductLookupItem.and.returnValue(of({
+      items: [{ productId: 2, name: 'حليب', barcode: '222', priceUsd: 1.5 }]
+    }));
+
+    fixture.detectChanges();
+
+    expect(component.actionCenterNote).toBe('اقتراح من مركز القرارات');
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('اقتراح من مركز القرارات');
+  });
+
+  it('should keep modal open and show message if action center lookup fails', () => {
+    queryParamMap$.next(convertToParamMap({ action: 'create', productId: '2', source: 'action-center' }));
+    apiSpy.getProductLookupItem.and.returnValue(throwError(() => new Error('lookup failed')));
+
+    fixture.detectChanges();
+
+    expect(component.activeModal).toBe('form');
+    expect(component.formError).toBe('تعذر تحديد المنتج تلقائيًا، يمكنك البحث عنه يدويًا');
+  });
+
+  it('should save action center offer with selected productId', () => {
+    queryParamMap$.next(convertToParamMap({ action: 'create', productId: '2', source: 'action-center' }));
+    apiSpy.getProductLookupItem.and.returnValue(of({
+      items: [{ productId: 2, name: 'حليب', barcode: '222', priceUsd: 1.5 }]
+    }));
+    apiSpy.create.and.returnValue(of({ id: 1, productId: 2, productName: 'حليب', discountType: 'Amount', discountValue: 5, isActive: true, createdAt: '', updatedAt: '' }));
+
+    fixture.detectChanges();
+    component.formData.discountValue = 5;
+    component.saveOffer();
+
+    expect(apiSpy.create).toHaveBeenCalledWith({ productId: 2, discountType: 'Amount', discountValue: 5 });
+  });
+
+  it('should keep normal offers screen unchanged without query params', () => {
+    fixture.detectChanges();
+
+    expect(component.activeModal).toBeNull();
+    expect(apiSpy.getProductLookupItem).not.toHaveBeenCalled();
+    expect(apiSpy.getAll).toHaveBeenCalled();
   });
 });

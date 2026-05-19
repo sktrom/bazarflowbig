@@ -1,7 +1,8 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
 import { ActionCenterApiService } from '../../services/action-center-api.service';
-import { ActionCenterResponseDto } from '../../models/action-center.model';
+import { ActionCenterResponseDto, ProductActionItemDto } from '../../models/action-center.model';
 import { finalize } from 'rxjs';
 
 @Component({
@@ -148,11 +149,12 @@ import { finalize } from 'rxjs';
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الباركود</th>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المخزون الحالي</th>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" *ngIf="activeTab === 'expired' || activeTab === 'expiringSoon'">تاريخ الانتهاء</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">إجراءات</th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                   <tr *ngIf="getActiveList().length === 0">
-                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">لا توجد سجلات في هذه القائمة.</td>
+                    <td colspan="5" class="px-6 py-8 text-center text-gray-500">لا توجد سجلات في هذه القائمة.</td>
                   </tr>
                   <tr *ngFor="let item of getActiveList()" class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ item.productName }}</td>
@@ -167,6 +169,28 @@ import { finalize } from 'rxjs';
                         {{ getAsBatch(item).expiryDate | date:'yyyy-MM-dd' }}
                       </span>
                     </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                      <div class="flex flex-wrap gap-2">
+                        <button *ngIf="canCreateOffer()"
+                                type="button"
+                                class="px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors text-xs font-bold"
+                                (click)="createOffer(item)">
+                          إنشاء عرض
+                        </button>
+                        <button *ngIf="canOpenProduct()"
+                                type="button"
+                                class="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors text-xs font-bold"
+                                (click)="openProduct(item)">
+                          {{ getProductActionLabel() }}
+                        </button>
+                        <button *ngIf="canOpenInventory()"
+                                type="button"
+                                class="px-3 py-1 rounded bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors text-xs font-bold"
+                                (click)="openInventory(item)">
+                          فتح المخزون
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -179,6 +203,7 @@ import { finalize } from 'rxjs';
 })
 export class ActionCenterComponent implements OnInit {
   private readonly apiService = inject(ActionCenterApiService);
+  private readonly router = inject(Router);
 
   isLoading = false;
   errorMessage = '';
@@ -229,5 +254,49 @@ export class ActionCenterComponent implements OnInit {
 
   getAsBatch(item: any): any {
     return item;
+  }
+
+  canCreateOffer(): boolean {
+    return this.activeTab === 'expiringSoon' || this.activeTab === 'offers';
+  }
+
+  canOpenInventory(): boolean {
+    return this.activeTab === 'outOfStock' ||
+      this.activeTab === 'lowStock' ||
+      this.activeTab === 'expired' ||
+      this.activeTab === 'expiringSoon';
+  }
+
+  canOpenProduct(): boolean {
+    return this.activeTab === 'outOfStock' ||
+      this.activeTab === 'lowStock' ||
+      this.activeTab === 'inactive' ||
+      this.activeTab === 'offers';
+  }
+
+  getProductActionLabel(): string {
+    return this.activeTab === 'inactive' ? 'فتح المنتج للمراجعة' : 'فتح المنتج';
+  }
+
+  createOffer(item: ProductActionItemDto): void {
+    this.router.navigate(['/offers'], {
+      queryParams: {
+        action: 'create',
+        productId: item.productId,
+        source: 'action-center'
+      }
+    });
+  }
+
+  openInventory(item: ProductActionItemDto): void {
+    this.router.navigate(['/inventory'], {
+      queryParams: { search: item.barcode }
+    });
+  }
+
+  openProduct(item: ProductActionItemDto): void {
+    this.router.navigate(['/products'], {
+      queryParams: { productId: item.productId }
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { environment } from '../../../../environments/environment';
 import {
   OfferListResponse,
@@ -11,6 +12,13 @@ import {
   DeleteOfferResponse,
   OfferProductLookupResponse
 } from '../models/offer.model';
+
+interface ProductDetailForOffer {
+  id: number;
+  name: string;
+  barcode: string;
+  priceUsd: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class OffersApiService {
@@ -49,5 +57,17 @@ export class OffersApiService {
     const params: Record<string, string> = {};
     if (search?.trim()) params['search'] = search.trim();
     return this.http.get<OfferProductLookupResponse>(`${this.baseUrl}/products-lookup`, { params });
+  }
+
+  getProductLookupItem(productId: number): Observable<OfferProductLookupResponse> {
+    return this.http.get<ProductDetailForOffer>(`${environment.apiUrl}/api/products/${productId}`)
+      .pipe(map(product => ({
+        items: [{
+          productId: product.id,
+          name: product.name,
+          barcode: product.barcode,
+          priceUsd: product.priceUsd
+        }]
+      })));
   }
 }

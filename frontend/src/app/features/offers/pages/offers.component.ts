@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { OffersApiService } from '../services/offers-api.service';
 import { OfferListItem, OfferProductLookupItem } from '../models/offer.model';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -151,6 +152,10 @@ import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
               {{ formError }}
             </div>
 
+            <div *ngIf="actionCenterNote" class="bg-blue-50 text-blue-700 border border-blue-100 p-3 rounded-md text-sm mb-4">
+              {{ actionCenterNote }}
+            </div>
+
             <!-- Product lookup (create mode) -->
             <div *ngIf="!editId">
               <label class="block text-sm font-medium text-slate-700 mb-1">المنتج <span class="text-red-500">*</span></label>
@@ -259,6 +264,7 @@ export class OffersComponent implements OnInit {
   formError = '';
 
   actionCandidate: OfferListItem | null = null;
+  actionCenterNote = '';
 
   // Product lookup state
   productSearchTerm = '';
@@ -267,13 +273,17 @@ export class OffersComponent implements OnInit {
   selectedProduct: OfferProductLookupItem | null = null;
   private productSearch$ = new Subject<string>();
 
-  constructor(private api: OffersApiService) {}
+  constructor(
+    private api: OffersApiService,
+    private route: ActivatedRoute
+  ) {}
 
   ngOnInit() {
     this.loadOffers();
     this.productSearch$.pipe(debounceTime(300), distinctUntilChanged()).subscribe(term => {
       this.runProductSearch(term);
     });
+    this.handleActionCenterCreateRoute();
   }
 
   loadOffers() {
@@ -312,6 +322,7 @@ export class OffersComponent implements OnInit {
     this.editId = null;
     this.formData = { productId: null, discountType: 'Amount', discountValue: null };
     this.formError = '';
+    this.actionCenterNote = '';
     this.selectedProduct = null;
     this.productSearchTerm = '';
     this.productLookupResults = [];
@@ -329,6 +340,7 @@ export class OffersComponent implements OnInit {
       discountValue: item.discountValue 
     };
     this.formError = '';
+    this.actionCenterNote = '';
     this.selectedProduct = null;
     this.productSearchTerm = '';
     this.productLookupResults = [];
@@ -390,6 +402,45 @@ export class OffersComponent implements OnInit {
         this.productSearchLoading = false;
       },
       error: () => { this.productSearchLoading = false; }
+    });
+  }
+
+  private handleActionCenterCreateRoute() {
+    this.route.queryParamMap.subscribe(params => {
+      const action = params.get('action');
+      const source = params.get('source');
+      const productIdParam = params.get('productId');
+
+      if (action !== 'create' || source !== 'action-center' || !productIdParam) {
+        return;
+      }
+
+      const productId = Number(productIdParam);
+      if (!Number.isFinite(productId) || productId <= 0) {
+        return;
+      }
+
+      this.openCreateModal();
+      this.actionCenterNote = 'اقتراح من مركز القرارات';
+      this.formData.productId = productId;
+      this.productSearchLoading = true;
+
+      this.api.getProductLookupItem(productId).subscribe({
+        next: (res) => {
+          const product = res.items?.find(p => p.productId === productId);
+          if (product) {
+            this.selectProduct(product);
+            this.formError = '';
+          } else {
+            this.formError = 'تعذر تحديد المنتج تلقائيًا، يمكنك البحث عنه يدويًا';
+          }
+          this.productSearchLoading = false;
+        },
+        error: () => {
+          this.formError = 'تعذر تحديد المنتج تلقائيًا، يمكنك البحث عنه يدويًا';
+          this.productSearchLoading = false;
+        }
+      });
     });
   }
 
@@ -528,6 +579,7 @@ export class OffersComponent implements OnInit {
   closeModal() {
     this.activeModal = null;
     this.formError = '';
+    this.actionCenterNote = '';
     this.actionCandidate = null;
     this.selectedProduct = null;
     this.productSearchTerm = '';
