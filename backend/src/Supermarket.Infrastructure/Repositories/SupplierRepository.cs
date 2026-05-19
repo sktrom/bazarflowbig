@@ -62,8 +62,7 @@ namespace Supermarket.Infrastructure.Repositories
 
         public Task<bool> IsSupplierUsedAsync(long id)
         {
-            // Future extension point: return true when purchase invoices reference this supplier.
-            return Task.FromResult(false);
+            return _context.PurchaseInvoices.AnyAsync(invoice => invoice.SupplierId == id);
         }
     }
 }
