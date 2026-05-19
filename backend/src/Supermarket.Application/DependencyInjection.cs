@@ -34,6 +34,8 @@ using Supermarket.Application.Exports.Interfaces;
 using Supermarket.Application.Exports.Services;
 using Supermarket.Application.Suppliers.Interfaces;
 using Supermarket.Application.Suppliers.Services;
+using Supermarket.Application.PurchaseInvoices.Interfaces;
+using Supermarket.Application.PurchaseInvoices.Services;
 
 namespace Supermarket.Application
 {
@@ -59,6 +61,7 @@ namespace Supermarket.Application
             services.AddScoped<IActionCenterService, ActionCenterService>();
             services.AddScoped<IReportsService, ReportsService>();
             services.AddScoped<ISupplierService, SupplierService>();
+            services.AddScoped<IPurchaseInvoiceService, PurchaseInvoiceService>();
             
             services.AddScoped<IExportFormatBuilder, ExportFormatBuilder>();
             services.AddScoped<IPrintHtmlBuilder, PrintHtmlBuilder>();

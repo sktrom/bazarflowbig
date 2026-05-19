@@ -15,6 +15,7 @@ using Supermarket.Application.AdjustmentRequests.Interfaces;
 using Supermarket.Application.InventoryQueries.Interfaces;
 using Supermarket.Application.Reports.Interfaces;
 using Supermarket.Application.Suppliers.Interfaces;
+using Supermarket.Application.PurchaseInvoices.Interfaces;
 using Supermarket.Infrastructure.Persistence;
 using Supermarket.Infrastructure.Repositories;
 
@@ -53,6 +54,7 @@ namespace Supermarket.Infrastructure
             services.AddScoped<IInventoryQueryRepository, InventoryQueryRepository>();
             services.AddScoped<IReportsRepository, ReportsRepository>();
             services.AddScoped<ISupplierRepository, SupplierRepository>();
+            services.AddScoped<IPurchaseInvoiceRepository, PurchaseInvoiceRepository>();
 
             return services;
         }
