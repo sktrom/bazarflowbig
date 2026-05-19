@@ -95,3 +95,12 @@ export interface PublicSettingsResponse {
   storeName: string;
   exchangeRate: number;
 }
+
+export interface CreateBackupResponse {
+  success: boolean;
+  fileName: string;
+  createdAt: string;
+  sizeBytes: number;
+  message: string;
+  backupDirectory: string;
+}

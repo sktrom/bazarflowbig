@@ -61,4 +61,11 @@ describe('SettingsApiService', () => {
     expect(req.request.method).toBe('GET');
     req.flush({ storeName: 'Test', exchangeRate: 15000 });
   });
+
+  it('should create backup', () => {
+    service.createBackup().subscribe();
+    const req = httpMock.expectOne(`${environment.apiUrl}/api/system/backup`);
+    expect(req.request.method).toBe('POST');
+    req.flush({ success: true, fileName: 'backup.bak' });
+  });
 });

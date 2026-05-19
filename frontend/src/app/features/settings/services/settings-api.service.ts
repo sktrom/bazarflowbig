@@ -8,7 +8,7 @@ import {
   DeleteEmployeeResponse, ResetPasswordRequest, ResetPasswordResponse,
   CategoryListResponse, CategoryItem,
   CreateCategoryRequest, UpdateCategoryRequest, DeleteCategoryResponse,
-  PublicSettingsResponse
+  PublicSettingsResponse, CreateBackupResponse
 } from '../models/settings.model';
 
 @Injectable({ providedIn: 'root' })
@@ -16,6 +16,7 @@ export class SettingsApiService {
   private readonly emp = `${environment.apiUrl}/api/employees`;
   private readonly cat = `${environment.apiUrl}/api/categories`;
   private readonly pub = `${environment.apiUrl}/api/settings/public`;
+  private readonly backup = `${environment.apiUrl}/api/system/backup`;
 
   constructor(private http: HttpClient) {}
 
@@ -64,5 +65,9 @@ export class SettingsApiService {
   // --- Settings ---
   getPublicSettings(): Observable<PublicSettingsResponse> {
     return this.http.get<PublicSettingsResponse>(this.pub);
+  }
+
+  createBackup(): Observable<CreateBackupResponse> {
+    return this.http.post<CreateBackupResponse>(this.backup, {});
   }
 }

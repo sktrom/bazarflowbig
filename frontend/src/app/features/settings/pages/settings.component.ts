@@ -3,9 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SettingsApiService } from '../services/settings-api.service';
-import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse } from '../models/settings.model';
+import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse } from '../models/settings.model';
 
-type TabType = 'employees' | 'categories' | 'store';
+type TabType = 'employees' | 'categories' | 'store' | 'backup';
 type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | null;
 
 const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings'];
@@ -17,6 +17,9 @@ const ERR: Record<string,string> = {
   CATEGORY_NAME_ALREADY_EXISTS: 'اسم التصنيف موجود مسبقًا',
   CATEGORY_NOT_FOUND: 'التصنيف غير موجود',
   INVALID_PASSWORD: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل',
+  BACKUP_PATH_NOT_ACCESSIBLE: 'مسار النسخ الاحتياطي غير قابل للكتابة',
+  BACKUP_SQL_FAILED: 'فشل تنفيذ النسخ الاحتياطي في SQL Server',
+  BACKUP_DIRECTORY_NOT_CONFIGURED: 'مسار النسخ الاحتياطي غير مهيأ',
 };
 
 function mapErr(e: HttpErrorResponse): string {
@@ -126,6 +129,40 @@ function mapErr(e: HttpErrorResponse): string {
           <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-sm">⚠️ تعديل اسم المتجر وسعر الصرف غير متاح في هذه النسخة.</div>
         </div>
       </div>
+
+      <!-- BACKUP TAB -->
+      <div *ngIf="activeTab==='backup'">
+        <div class="max-w-2xl bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-5">
+          <div>
+            <h2 class="font-bold text-slate-800 mb-1">النسخ الاحتياطي</h2>
+            <p class="text-sm text-slate-500">إنشاء نسخة احتياطية محلية من قاعدة بيانات SQL Server.</p>
+          </div>
+
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-sm">
+            النسخة الاحتياطية تحتوي بيانات حساسة مثل الفواتير والموظفين والصلاحيات. احفظ الملف في مكان آمن ولا تشاركه إلا مع شخص مخول.
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button (click)="createBackup()" [disabled]="backupLoading"
+              class="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium disabled:opacity-50">
+              {{ backupLoading ? 'جاري إنشاء النسخة...' : 'إنشاء نسخة احتياطية' }}
+            </button>
+            <span class="text-xs text-slate-500">لا يوجد استرجاع أو تنزيل مباشر في هذه النسخة.</span>
+          </div>
+
+          <div *ngIf="backupError" class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
+            {{ backupError }}
+          </div>
+
+          <div *ngIf="backupResult" class="border border-green-200 bg-green-50 rounded-lg p-4 text-sm text-green-900 space-y-2">
+            <div class="font-bold">تم إنشاء النسخة الاحتياطية بنجاح</div>
+            <div><span class="text-green-700">اسم الملف:</span> {{ backupResult.fileName }}</div>
+            <div><span class="text-green-700">وقت الإنشاء:</span> {{ backupResult.createdAt | date:'medium' }}</div>
+            <div><span class="text-green-700">الحجم:</span> {{ formatBytes(backupResult.sizeBytes) }}</div>
+            <div><span class="text-green-700">المجلد:</span> {{ backupResult.backupDirectory }}</div>
+          </div>
+        </div>
+      </div>
     </ng-container>
   </div>
 
@@ -219,7 +256,8 @@ export class SettingsComponent implements OnInit {
   tabs = [
     { id: 'employees' as TabType, label: 'الموظفون' },
     { id: 'categories' as TabType, label: 'التصنيفات' },
-    { id: 'store' as TabType, label: 'المتجر' }
+    { id: 'store' as TabType, label: 'المتجر' },
+    { id: 'backup' as TabType, label: 'النسخ الاحتياطي' }
   ];
   allScreens = ALL_SCREENS;
   activeTab: TabType = 'employees';
@@ -232,6 +270,9 @@ export class SettingsComponent implements OnInit {
   employees: EmployeeListItem[] = [];
   categories: CategoryItem[] = [];
   storeSettings: PublicSettingsResponse | null = null;
+  backupResult: CreateBackupResponse | null = null;
+  backupLoading = false;
+  backupError = '';
 
   // Employee form state
   editEmpId: number | null = null;
@@ -257,8 +298,10 @@ export class SettingsComponent implements OnInit {
       this.api.getEmployees().subscribe({ next: r => { this.employees = r.items || []; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
     } else if (this.activeTab === 'categories') {
       this.api.getCategories().subscribe({ next: r => { this.categories = r.items || []; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
-    } else {
+    } else if (this.activeTab === 'store') {
       this.api.getPublicSettings().subscribe({ next: r => { this.storeSettings = r; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
+    } else {
+      this.loading = false;
     }
   }
 
@@ -342,6 +385,31 @@ export class SettingsComponent implements OnInit {
     if (!this.actionCat) return;
     this.saving = true;
     this.api.deleteCategory(this.actionCat.id).subscribe({ next: r => { this.saving = false; this.closeModal(); this.loadTab(); if (r.action === 'DISABLED') this.showToast('تم تعطيل التصنيف بدلاً من حذفه'); }, error: e => { this.saving = false; this.closeModal(); this.showToast(mapErr(e)); } });
+  }
+
+  createBackup() {
+    this.backupError = '';
+    this.backupResult = null;
+    this.backupLoading = true;
+    this.api.createBackup().subscribe({
+      next: r => {
+        this.backupLoading = false;
+        this.backupResult = r;
+      },
+      error: e => {
+        this.backupLoading = false;
+        const mapped = mapErr(e);
+        this.backupError = mapped === 'حدث خطأ أثناء تنفيذ العملية'
+          ? 'فشل إنشاء النسخة الاحتياطية'
+          : mapped;
+      }
+    });
+  }
+
+  formatBytes(bytes: number): string {
+    if (!bytes) return '0 B';
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1 ? `${mb.toFixed(2)} MB` : `${(bytes / 1024).toFixed(2)} KB`;
   }
 
   closeModal() { this.activeModal = null; this.formErr = ''; this.saving = false; }

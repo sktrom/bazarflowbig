@@ -24,7 +24,7 @@ describe('SettingsComponent', () => {
   beforeEach(async () => {
     const spy = jasmine.createSpyObj('SettingsApiService', [
       'getEmployees','getEmployee','createEmployee','updateEmployee','deleteEmployee','resetPassword',
-      'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings'
+      'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings','createBackup'
     ]);
     spy.getEmployees.and.returnValue(of({ items: mockEmployees }));
     spy.getCategories.and.returnValue(of({ items: [] }));
@@ -58,6 +58,48 @@ describe('SettingsComponent', () => {
     expect(apiSpy.getPublicSettings).toHaveBeenCalled();
     expect(component.storeSettings?.storeName).toBe('Test Store');
     expect(component.storeSettings?.exchangeRate).toBe(15000);
+  });
+
+  it('should render backup tab', () => {
+    component.switchTab('backup');
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('النسخ الاحتياطي');
+    expect(text).toContain('إنشاء نسخة احتياطية');
+  });
+
+  it('should call create backup and render success metadata', () => {
+    apiSpy.createBackup.and.returnValue(of({
+      success: true,
+      fileName: 'BazarFlow_Backup_20260520_143012.bak',
+      createdAt: '2026-05-20T14:30:12',
+      sizeBytes: 1048576,
+      message: 'Backup created successfully.',
+      backupDirectory: 'C:\\BazarFlowBackups'
+    }));
+
+    component.switchTab('backup');
+    component.createBackup();
+    fixture.detectChanges();
+
+    expect(apiSpy.createBackup).toHaveBeenCalled();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('BazarFlow_Backup_20260520_143012.bak');
+    expect(text).toContain('C:\\BazarFlowBackups');
+    expect(text).toContain('1.00 MB');
+  });
+
+  it('should render backup error message', () => {
+    const err = new HttpErrorResponse({ error: { error: 'BACKUP_SQL_FAILED' }, status: 500 });
+    apiSpy.createBackup.and.returnValue(throwError(() => err));
+
+    component.switchTab('backup');
+    component.createBackup();
+    fixture.detectChanges();
+
+    expect(component.backupError).toBe('فشل تنفيذ النسخ الاحتياطي في SQL Server');
+    expect(fixture.nativeElement.textContent).toContain('فشل تنفيذ النسخ الاحتياطي في SQL Server');
   });
 
   it('should open create employee modal', () => {
