@@ -46,6 +46,7 @@ export interface InvoiceDetailsResponse {
   status: string;
   customerName?: string;
   originalEmployeeId: number;
+  employeeName?: string;
   invoiceDiscountType?: string;
   invoiceDiscountValue?: number;
   subtotalUsd: number;

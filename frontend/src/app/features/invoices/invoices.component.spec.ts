@@ -1,11 +1,12 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { InvoicesComponent } from './invoices.component';
-import { InvoicesApiService } from './services/invoices-api.service';
+import { InvoicesApiService, InvoiceDetailsResponse } from './services/invoices-api.service';
 import { InvoicesStateService } from './services/invoices-state.service';
 import { of } from 'rxjs';
 import { HttpResponse, HttpHeaders } from '@angular/common/http';
 import { RouterTestingModule } from '@angular/router/testing';
+import { By } from '@angular/platform-browser';
 
 describe('InvoicesComponent Export', () => {
   let component: InvoicesComponent;
@@ -13,8 +14,38 @@ describe('InvoicesComponent Export', () => {
   let apiSpy: jasmine.SpyObj<InvoicesApiService>;
   let stateSpy: jasmine.SpyObj<InvoicesStateService>;
 
+  const mockDetails: InvoiceDetailsResponse = {
+    invoiceId: 10,
+    invoiceNumber: 'INV-10',
+    status: 'Completed',
+    customerName: 'Ahmad',
+    originalEmployeeId: 1,
+    employeeName: 'Cashier One',
+    subtotalUsd: 12,
+    totalUsd: 10,
+    exchangeRateSypSnapshot: 10000,
+    totalSyp: 100000,
+    hasManualPriceEdit: false,
+    hasAdjustmentRequest: false,
+    createdAt: '2026-05-18T10:00:00Z',
+    completedAt: '2026-05-18T10:05:00Z',
+    lines: [
+      {
+        lineId: 1,
+        productId: 1,
+        productName: 'Prod A',
+        quantity: 1,
+        unitPriceUsdOriginal: 12,
+        lineTotalUsdOriginal: 12,
+        lineTotalUsdEffective: 12,
+        isPriceOverridden: false,
+        sortOrder: 1
+      }
+    ]
+  };
+
   beforeEach(async () => {
-    apiSpy = jasmine.createSpyObj('InvoicesApiService', ['exportInvoices', 'getInvoices']);
+    apiSpy = jasmine.createSpyObj('InvoicesApiService', ['exportInvoices', 'getInvoices', 'getInvoiceDetails']);
     stateSpy = jasmine.createSpyObj('InvoicesStateService', ['loadInvoices', 'setError'], {
       state$: of({ items: [], totalCount: 0, page: 1, pageSize: 20, isLoading: false, error: null })
     });
@@ -63,5 +94,21 @@ describe('InvoicesComponent Export', () => {
       manualPriceEdited: true
     }));
     expect(window.URL.createObjectURL).toHaveBeenCalledWith(mockBlob);
+  });
+
+  it('prints the loaded invoice details receipt', () => {
+    const printSpy = spyOn(window, 'print').and.stub();
+    apiSpy.getInvoiceDetails.and.returnValue(of(mockDetails));
+
+    component.viewDetails(10);
+    fixture.detectChanges();
+
+    const printButton = fixture.debugElement.query(By.css('[data-testid="invoice-print-button"]'));
+    expect(printButton).toBeTruthy();
+
+    printButton.triggerEventHandler('click', new MouseEvent('click'));
+
+    expect(apiSpy.getInvoiceDetails).toHaveBeenCalledWith(10);
+    expect(printSpy).toHaveBeenCalled();
   });
 });

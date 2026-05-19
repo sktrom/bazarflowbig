@@ -34,3 +34,57 @@
   .badge-danger { @apply bg-red-100 text-red-800; }
   .badge-warning { @apply bg-yellow-100 text-yellow-800; }
 }
+
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  @page {
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  app-receipt-print,
+  app-receipt-print *,
+  .receipt-print-root,
+  .receipt-print-root * {
+    visibility: visible !important;
+  }
+
+  app-receipt-print {
+    display: block !important;
+  }
+
+  app-receipt-print.print-only {
+    display: block !important;
+  }
+
+  .receipt-print-root {
+    position: fixed !important;
+    inset: 0 0 auto 0 !important;
+    width: 80mm !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+}

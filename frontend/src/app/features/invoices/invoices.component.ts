@@ -4,11 +4,12 @@ import { FormsModule } from '@angular/forms';
 import { InvoicesStateService } from './services/invoices-state.service';
 import { InvoicesApiService, InvoiceListItem, InvoiceDetailsResponse, CreateAdjustmentRequest } from './services/invoices-api.service';
 import { Router } from '@angular/router';
+import { ReceiptPrintComponent } from '../../shared/components/receipt-print/receipt-print.component';
 
 @Component({
   selector: 'app-invoices',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ReceiptPrintComponent],
   template: `
     <div class="p-6 h-full flex flex-col bg-slate-50 text-slate-800" dir="rtl">
       
@@ -149,8 +150,21 @@ import { Router } from '@angular/router';
         <div *ngIf="activeModal === 'details'" class="bg-white rounded-lg shadow-xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
           <div class="p-4 border-b border-slate-100 font-bold text-slate-800 flex justify-between items-center shrink-0">
             <span>تفاصيل الفاتورة: {{ selectedInvoice?.invoiceNumber }}</span>
-            <button (click)="closeModal()" class="text-slate-400 hover:text-slate-600">x</button>
+            <div class="flex items-center gap-2 no-print">
+              <button
+                class="btn-secondary text-xs py-1.5 px-3"
+                data-testid="invoice-print-button"
+                [disabled]="!selectedInvoice || isPrinting"
+                title="طباعة الإيصال"
+                (click)="printReceipt()"
+              >
+                <svg class="w-4 h-4 ml-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-12 0h12v4H6v-4z"></path></svg>
+                طباعة
+              </button>
+              <button (click)="closeModal()" class="text-slate-400 hover:text-slate-600">x</button>
+            </div>
           </div>
+          <app-receipt-print class="print-only" [invoice]="selectedInvoice" [reprint]="true"></app-receipt-print>
           <div class="p-6 overflow-y-auto flex-1 space-y-6 text-sm">
             
             <div class="grid grid-cols-4 gap-4 bg-slate-50 p-4 rounded border border-slate-100">
@@ -334,6 +348,7 @@ export class InvoicesComponent implements OnInit {
   activeModal: 'details' | 'adjust' | 'review' | null = null;
   selectedInvoice: InvoiceDetailsResponse | null = null;
   selectedAdjustment: any = null; // AdjustmentRequestResponse
+  isPrinting = false;
   
   // Adjustment Form
   adjForm: any = { requestType: 'ChangeQuantity', reason: '' };
@@ -376,6 +391,13 @@ export class InvoicesComponent implements OnInit {
       this.selectedInvoice = res;
       this.activeModal = 'details';
     });
+  }
+
+  printReceipt() {
+    if (!this.selectedInvoice || this.isPrinting) return;
+    this.isPrinting = true;
+    window.print();
+    window.setTimeout(() => this.isPrinting = false, 500);
   }
 
   loadToCashier(id: number) {
@@ -489,6 +511,7 @@ export class InvoicesComponent implements OnInit {
     this.activeModal = null;
     this.selectedInvoice = null;
     this.selectedAdjustment = null;
+    this.isPrinting = false;
   }
 
   exportInvoices() {

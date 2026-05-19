@@ -1,14 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { CashierStateService } from './services/cashier-state.service';
 import { ProductsPaneComponent } from './components/products-pane.component';
 import { InvoicePaneComponent } from './components/invoice-pane.component';
+import { InvoicesApiService, InvoiceDetailsResponse } from '../invoices/services/invoices-api.service';
+import { ReceiptPrintComponent } from '../../shared/components/receipt-print/receipt-print.component';
 
 @Component({
   selector: 'app-cashier',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProductsPaneComponent, InvoicePaneComponent],
+  imports: [CommonModule, FormsModule, ProductsPaneComponent, InvoicePaneComponent, ReceiptPrintComponent],
   template: `
     <div class="flex flex-col h-screen bg-slate-100 overflow-hidden text-slate-800" dir="rtl">
       
@@ -168,6 +171,37 @@ import { InvoicePaneComponent } from './components/invoice-pane.component';
           </div>
         </div>
 
+        <!-- Receipt Preview Modal -->
+        <div *ngIf="activeModal === 'receipt'" class="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
+          <div class="p-4 border-b border-green-100 bg-green-50 font-bold text-green-800 flex items-center justify-between shrink-0 no-print">
+            <span>تمت عملية الدفع</span>
+            <button (click)="closeModal()" class="text-green-700/70 hover:text-green-900">x</button>
+          </div>
+          <div class="p-4 overflow-y-auto flex-1 bg-slate-50">
+            <div *ngIf="isReceiptLoading" class="py-10 text-center text-slate-500 text-sm no-print">
+              جاري تحميل بيانات الإيصال...
+            </div>
+
+            <div *ngIf="receiptError" class="bg-amber-50 border border-amber-200 text-amber-800 rounded p-3 text-sm no-print">
+              {{ receiptError }}
+            </div>
+
+            <app-receipt-print *ngIf="completedInvoice" [invoice]="completedInvoice"></app-receipt-print>
+          </div>
+          <div class="p-4 bg-white border-t border-slate-100 flex gap-2 justify-end shrink-0 no-print">
+            <button class="btn-secondary text-sm" (click)="closeModal()">إغلاق</button>
+            <button
+              class="btn-primary text-sm"
+              data-testid="cashier-print-button"
+              [disabled]="!completedInvoice || isReceiptLoading || isPrinting"
+              (click)="printReceipt()"
+            >
+              <svg class="w-4 h-4 ml-1 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-12 0h12v4H6v-4z"></path></svg>
+              طباعة الإيصال
+            </button>
+          </div>
+        </div>
+
       </div>
 
     </div>
@@ -181,12 +215,19 @@ import { InvoicePaneComponent } from './components/invoice-pane.component';
 })
 export class CashierComponent implements OnInit {
   activeTab: 'products' | 'invoice' = 'invoice'; // Mobile default to invoice
-  activeModal: 'customer' | 'discount' | 'suspend' | 'cancel' | 'complete' | null = null;
+  activeModal: 'customer' | 'discount' | 'suspend' | 'cancel' | 'complete' | 'receipt' | null = null;
   modalData: any = {};
+  completedInvoice: InvoiceDetailsResponse | null = null;
+  isReceiptLoading = false;
+  receiptError: string | null = null;
+  isPrinting = false;
   
   state = this.cashierState['stateObj']; // bind to snapshot, we'll sync via subscribe
 
-  constructor(public cashierState: CashierStateService) {}
+  constructor(
+    public cashierState: CashierStateService,
+    private invoicesApi: InvoicesApiService
+  ) {}
 
   ngOnInit(): void {
     this.cashierState.state$.subscribe(s => this.state = s);
@@ -213,7 +254,14 @@ export class CashierComponent implements OnInit {
 
   // --- Modals ---
   closeModal() {
+    const closingModal = this.activeModal;
     this.activeModal = null;
+    if (closingModal === 'receipt') {
+      this.completedInvoice = null;
+      this.isReceiptLoading = false;
+      this.receiptError = null;
+      this.isPrinting = false;
+    }
   }
 
   openCustomerModal() {
@@ -276,8 +324,41 @@ export class CashierComponent implements OnInit {
 
   confirmComplete() {
     this.cashierState.completeCart().subscribe({
-      next: () => this.closeModal(),
+      next: (cart) => {
+        if (cart.invoiceId) {
+          this.openReceiptAfterComplete(cart.invoiceId);
+        } else {
+          this.closeModal();
+        }
+      },
       error: () => this.closeModal()
     });
+  }
+
+  private openReceiptAfterComplete(invoiceId: number) {
+    this.completedInvoice = null;
+    this.receiptError = null;
+    this.isReceiptLoading = true;
+    this.activeModal = 'receipt';
+
+    this.invoicesApi.getInvoiceDetails(invoiceId).subscribe({
+      next: (invoice) => {
+        this.completedInvoice = invoice;
+        this.isReceiptLoading = false;
+      },
+      error: (err: HttpErrorResponse) => {
+        this.isReceiptLoading = false;
+        this.receiptError = err.error?.error === 'UNAUTHORIZED_SCREEN_ACCESS'
+          ? 'تم الدفع بنجاح، لكن لا تملك صلاحية عرض تفاصيل الفاتورة للطباعة.'
+          : 'تم الدفع بنجاح، لكن تعذر تحميل بيانات الإيصال للطباعة.';
+      }
+    });
+  }
+
+  printReceipt() {
+    if (!this.completedInvoice || this.isPrinting) return;
+    this.isPrinting = true;
+    window.print();
+    window.setTimeout(() => this.isPrinting = false, 500);
   }
 }
