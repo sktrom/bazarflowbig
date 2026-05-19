@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Threading.Tasks;
 using Supermarket.Domain.Entities;
 
@@ -9,6 +10,7 @@ namespace Supermarket.Application.PurchaseInvoices.Interfaces
     {
         Task<IReadOnlyList<PurchaseInvoice>> GetAllAsync();
         Task<PurchaseInvoice?> GetByIdWithDetailsAsync(long id);
+        Task<PurchaseInvoice?> GetByIdWithDetailsForCompletionAsync(long id);
         Task<PurchaseInvoice?> GetByIdForUpdateAsync(long id);
         Task<PurchaseInvoice> CreateAsync(PurchaseInvoice invoice);
         Task UpdateAsync(PurchaseInvoice invoice);
@@ -20,10 +22,12 @@ namespace Supermarket.Application.PurchaseInvoices.Interfaces
         Task<Supplier?> GetSupplierAsync(long supplierId);
         Task<Product?> GetProductAsync(long productId);
         Task<IReadOnlyList<Product>> LookupProductsAsync(string? search, int limit);
+        Task<bool> HasAnyBatchForPurchaseInvoiceLinesAsync(IEnumerable<long> lineIds);
+        Task AddProductBatchesAsync(IEnumerable<ProductBatch> batches);
         Task<int> GetInvoiceCountForDateAsync(DateTime dateUtc);
         Task<int> GetNextLineSortOrderAsync(long purchaseInvoiceId);
         Task RecalculateTotalsAsync(long purchaseInvoiceId);
-        Task ExecuteInTransactionAsync(Func<Task> operation);
+        Task ExecuteInTransactionAsync(Func<Task> operation, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted);
         Task SaveChangesAsync();
     }
 }

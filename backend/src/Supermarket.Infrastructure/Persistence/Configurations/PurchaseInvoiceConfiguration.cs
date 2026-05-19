@@ -46,6 +46,7 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
 
             builder.HasIndex(pi => pi.SupplierId);
             builder.HasIndex(pi => pi.CreatedByEmployeeId);
+            builder.HasIndex(pi => pi.CompletedByEmployeeId);
             builder.HasIndex(pi => new { pi.Status, pi.CreatedAt });
 
             builder.HasOne(pi => pi.Supplier)
@@ -56,6 +57,11 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
             builder.HasOne(pi => pi.CreatedByEmployee)
                 .WithMany()
                 .HasForeignKey(pi => pi.CreatedByEmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(pi => pi.CompletedByEmployee)
+                .WithMany()
+                .HasForeignKey(pi => pi.CompletedByEmployeeId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasMany(pi => pi.Lines)

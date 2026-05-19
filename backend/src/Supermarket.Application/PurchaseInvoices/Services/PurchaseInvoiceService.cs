@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Supermarket.Application.Common.Interfaces;
@@ -37,7 +39,10 @@ namespace Supermarket.Application.PurchaseInvoices.Services
                     SubtotalUsd = i.SubtotalUsd,
                     TotalUsd = i.TotalUsd,
                     CreatedAt = i.CreatedAt,
-                    UpdatedAt = i.UpdatedAt
+                    UpdatedAt = i.UpdatedAt,
+                    CompletedAt = i.CompletedAt,
+                    CompletedByEmployeeId = i.CompletedByEmployeeId,
+                    CompletedByEmployeeName = i.CompletedByEmployee?.FullName
                 }).ToList()
             };
         }
@@ -177,6 +182,70 @@ namespace Supermarket.Application.PurchaseInvoices.Services
             };
         }
 
+        public async Task<PurchaseInvoiceDetailResponse> CompleteAsync(long id)
+        {
+            if (_sessionContext.EmployeeId <= 0)
+                throw new InvalidOperationException("NO_ACTIVE_SESSION");
+
+            await _repository.ExecuteInTransactionAsync(async () =>
+            {
+                var invoice = await _repository.GetByIdWithDetailsForCompletionAsync(id);
+                if (invoice == null) throw new InvalidOperationException("PURCHASE_INVOICE_NOT_FOUND");
+
+                if (invoice.Status == PurchaseInvoiceStatus.Completed)
+                    throw new InvalidOperationException("PURCHASE_INVOICE_ALREADY_COMPLETED");
+
+                if (invoice.Status != PurchaseInvoiceStatus.Draft)
+                    throw new InvalidOperationException("PURCHASE_INVOICE_NOT_DRAFT");
+
+                if (!invoice.Lines.Any())
+                    throw new InvalidOperationException("PURCHASE_INVOICE_HAS_NO_LINES");
+
+                if (invoice.Supplier == null) throw new InvalidOperationException("SUPPLIER_NOT_FOUND");
+                if (!invoice.Supplier.IsActive) throw new InvalidOperationException("SUPPLIER_INACTIVE");
+
+                foreach (var line in invoice.Lines)
+                {
+                    if (line.Product == null) throw new InvalidOperationException("PRODUCT_NOT_FOUND");
+                    if (!line.Product.IsActive) throw new InvalidOperationException("PRODUCT_INACTIVE");
+                    ValidateLine(line.Quantity, line.UnitCostUsd, line.ExpiryDate, line.Product);
+                    line.LineTotalUsd = line.Quantity * line.UnitCostUsd;
+                }
+
+                var lineIds = invoice.Lines.Select(line => line.Id).ToList();
+                if (await _repository.HasAnyBatchForPurchaseInvoiceLinesAsync(lineIds))
+                    throw new InvalidOperationException("PURCHASE_INVOICE_ALREADY_COMPLETED");
+
+                var now = DateTime.UtcNow;
+                invoice.SubtotalUsd = invoice.Lines.Sum(line => line.LineTotalUsd);
+                invoice.TotalUsd = invoice.SubtotalUsd;
+                invoice.Status = PurchaseInvoiceStatus.Completed;
+                invoice.CompletedAt = now;
+                invoice.CompletedByEmployeeId = _sessionContext.EmployeeId;
+                invoice.UpdatedAt = now;
+
+                var batches = invoice.Lines.Select(line => new ProductBatch
+                {
+                    ProductId = line.ProductId,
+                    QuantityReceived = line.Quantity,
+                    QuantityAvailable = line.Quantity,
+                    EntryDate = now,
+                    ExpiryDate = line.ExpiryDate,
+                    EntryInvoiceNumber = string.IsNullOrWhiteSpace(invoice.ExternalInvoiceNumber)
+                        ? invoice.InvoiceNumber
+                        : invoice.ExternalInvoiceNumber,
+                    PurchaseInvoiceLineId = line.Id,
+                    UnitCostUsd = line.UnitCostUsd,
+                    EnteredByEmployeeId = _sessionContext.EmployeeId
+                }).ToList();
+
+                await _repository.AddProductBatchesAsync(batches);
+                await _repository.SaveChangesAsync();
+            }, IsolationLevel.Serializable);
+
+            return await GetByIdAsync(id);
+        }
+
         public async Task<PurchaseProductLookupResponse> LookupProductsAsync(string? search)
         {
             var products = await _repository.LookupProductsAsync(search, ProductLookupLimit);
@@ -256,6 +325,9 @@ namespace Supermarket.Application.PurchaseInvoices.Services
                 TotalUsd = invoice.TotalUsd,
                 CreatedAt = invoice.CreatedAt,
                 UpdatedAt = invoice.UpdatedAt,
+                CompletedAt = invoice.CompletedAt,
+                CompletedByEmployeeId = invoice.CompletedByEmployeeId,
+                CompletedByEmployeeName = invoice.CompletedByEmployee?.FullName,
                 Lines = invoice.Lines
                     .OrderBy(line => line.SortOrder)
                     .Select(line => new PurchaseInvoiceLineDto

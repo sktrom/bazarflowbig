@@ -23,11 +23,22 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
             builder.Property(pb => pb.EntryInvoiceNumber)
                 .HasMaxLength(100);
 
+            builder.Property(pb => pb.UnitCostUsd)
+                .HasColumnType("decimal(18,4)");
+
             builder.HasIndex(pb => new { pb.ProductId, pb.ExpiryDate });
+            builder.HasIndex(pb => pb.PurchaseInvoiceLineId)
+                .IsUnique()
+                .HasFilter("[PurchaseInvoiceLineId] IS NOT NULL");
 
             builder.HasOne(pb => pb.Product)
                 .WithMany()
                 .HasForeignKey(pb => pb.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(pb => pb.PurchaseInvoiceLine)
+                .WithMany()
+                .HasForeignKey(pb => pb.PurchaseInvoiceLineId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             builder.HasOne(pb => pb.EnteredByEmployee)

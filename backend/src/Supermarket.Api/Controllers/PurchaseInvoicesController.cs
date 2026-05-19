@@ -125,6 +125,20 @@ namespace Supermarket.Api.Controllers
             }
         }
 
+        [HttpPost("{id}/complete")]
+        public async Task<IActionResult> Complete(long id)
+        {
+            try
+            {
+                var response = await _purchaseInvoiceService.CompleteAsync(id);
+                return Ok(response);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return MapError(ex);
+            }
+        }
+
         [HttpGet("products-lookup")]
         public async Task<IActionResult> ProductsLookup([FromQuery] string? search)
         {
@@ -142,6 +156,8 @@ namespace Supermarket.Api.Controllers
                 "PRODUCT_NOT_FOUND" => NotFound(new { error = ex.Message }),
                 "PURCHASE_INVOICE_NUMBER_ALREADY_EXISTS" => Conflict(new { error = ex.Message }),
                 "PURCHASE_INVOICE_NOT_DRAFT" => Conflict(new { error = ex.Message }),
+                "PURCHASE_INVOICE_ALREADY_COMPLETED" => Conflict(new { error = ex.Message }),
+                "PURCHASE_INVOICE_HAS_NO_LINES" => BadRequest(new { error = ex.Message }),
                 "SUPPLIER_INACTIVE" => Conflict(new { error = ex.Message }),
                 "PRODUCT_INACTIVE" => Conflict(new { error = ex.Message }),
                 _ => BadRequest(new { error = ex.Message })

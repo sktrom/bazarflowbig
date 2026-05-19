@@ -24,6 +24,10 @@ namespace Supermarket.Domain.Entities
 
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+
+        public long? CompletedByEmployeeId { get; set; }
+        public Employee? CompletedByEmployee { get; set; }
 
         public List<PurchaseInvoiceLine> Lines { get; set; } = new();
     }

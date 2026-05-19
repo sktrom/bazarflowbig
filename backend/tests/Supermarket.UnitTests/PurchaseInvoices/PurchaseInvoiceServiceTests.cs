@@ -24,8 +24,8 @@ namespace Supermarket.UnitTests.PurchaseInvoices
             _repoMock = new Mock<IPurchaseInvoiceRepository>();
             _sessionMock = new Mock<ISessionContext>();
             _sessionMock.Setup(s => s.EmployeeId).Returns(42);
-            _repoMock.Setup(r => r.ExecuteInTransactionAsync(It.IsAny<Func<Task>>()))
-                .Returns<Func<Task>>(operation => operation());
+            _repoMock.Setup(r => r.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<System.Data.IsolationLevel>()))
+                .Returns<Func<Task>, System.Data.IsolationLevel>((operation, _) => operation());
             _service = new PurchaseInvoiceService(_repoMock.Object, _sessionMock.Object);
         }
 
@@ -291,6 +291,130 @@ namespace Supermarket.UnitTests.PurchaseInvoices
         }
 
         [Fact]
+        public async Task CompleteAsync_ShouldCreateBatchesAndMarkInvoiceCompleted()
+        {
+            var invoice = DraftInvoiceWithLine();
+            PurchaseInvoice? savedInvoice = null;
+            List<ProductBatch>? createdBatches = null;
+
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+            _repoMock.Setup(r => r.HasAnyBatchForPurchaseInvoiceLinesAsync(It.IsAny<IEnumerable<long>>())).ReturnsAsync(false);
+            _repoMock.Setup(r => r.AddProductBatchesAsync(It.IsAny<IEnumerable<ProductBatch>>()))
+                .Callback<IEnumerable<ProductBatch>>(batches => createdBatches = batches.ToList())
+                .Returns(Task.CompletedTask);
+            _repoMock.Setup(r => r.SaveChangesAsync())
+                .Callback(() => savedInvoice = invoice)
+                .Returns(Task.CompletedTask);
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(() =>
+            {
+                invoice.CompletedByEmployee = new Employee { Id = 42, FullName = "Cashier" };
+                return invoice;
+            });
+
+            var result = await _service.CompleteAsync(10);
+
+            Assert.Equal("Completed", result.Status);
+            Assert.NotNull(result.CompletedAt);
+            Assert.Equal(42, result.CompletedByEmployeeId);
+            Assert.Equal(PurchaseInvoiceStatus.Completed, savedInvoice!.Status);
+            Assert.Equal(6m, savedInvoice.SubtotalUsd);
+            Assert.Equal(6m, savedInvoice.TotalUsd);
+
+            var batch = Assert.Single(createdBatches!);
+            Assert.Equal(5, batch.ProductId);
+            Assert.Equal(3m, batch.QuantityReceived);
+            Assert.Equal(3m, batch.QuantityAvailable);
+            Assert.Equal(2m, batch.UnitCostUsd);
+            Assert.Equal(77, batch.PurchaseInvoiceLineId);
+            Assert.Equal(42, batch.EnteredByEmployeeId);
+            Assert.Equal("EXT-1", batch.EntryInvoiceNumber);
+            Assert.NotNull(batch.EntryDate);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRejectEmptyInvoice()
+        {
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(DraftInvoice());
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("PURCHASE_INVOICE_HAS_NO_LINES", exception.Message);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRejectAlreadyCompletedInvoice()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.Status = PurchaseInvoiceStatus.Completed;
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("PURCHASE_INVOICE_ALREADY_COMPLETED", exception.Message);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRejectNonDraftInvoice()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.Status = PurchaseInvoiceStatus.Cancelled;
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("PURCHASE_INVOICE_NOT_DRAFT", exception.Message);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRejectSecondCompletionWhenBatchAlreadyExists()
+        {
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(DraftInvoiceWithLine());
+            _repoMock.Setup(r => r.HasAnyBatchForPurchaseInvoiceLinesAsync(It.IsAny<IEnumerable<long>>())).ReturnsAsync(true);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("PURCHASE_INVOICE_ALREADY_COMPLETED", exception.Message);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRejectInactiveProduct()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.Lines[0].Product!.IsActive = false;
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("PRODUCT_INACTIVE", exception.Message);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRequireExpiryForExpiringProduct()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.Lines[0].Product!.HasExpiry = true;
+            invoice.Lines[0].ExpiryDate = null;
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("EXPIRY_DATE_REQUIRED", exception.Message);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldRejectExpiryForNonExpiringProduct()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.Lines[0].Product!.HasExpiry = false;
+            invoice.Lines[0].ExpiryDate = DateTime.UtcNow.Date.AddDays(30);
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CompleteAsync(10));
+
+            Assert.Equal("EXPIRY_DATE_NOT_ALLOWED", exception.Message);
+        }
+
+        [Fact]
         public async Task GetByIdAsync_ShouldThrowWhenInvoiceMissing()
         {
             _repoMock.Setup(r => r.GetByIdWithDetailsAsync(99)).ReturnsAsync((PurchaseInvoice?)null);
@@ -332,6 +456,28 @@ namespace Supermarket.UnitTests.PurchaseInvoices
                 Status = PurchaseInvoiceStatus.Draft,
                 Lines = new List<PurchaseInvoiceLine>()
             };
+        }
+
+        private static PurchaseInvoice DraftInvoiceWithLine()
+        {
+            var invoice = DraftInvoice();
+            invoice.ExternalInvoiceNumber = "EXT-1";
+            invoice.Lines = new List<PurchaseInvoiceLine>
+            {
+                new PurchaseInvoiceLine
+                {
+                    Id = 77,
+                    PurchaseInvoiceId = 10,
+                    ProductId = 5,
+                    Product = ActiveProduct(hasExpiry: true),
+                    Quantity = 3m,
+                    UnitCostUsd = 2m,
+                    LineTotalUsd = 5m,
+                    ExpiryDate = DateTime.UtcNow.Date.AddDays(30),
+                    SortOrder = 1
+                }
+            };
+            return invoice;
         }
     }
 }

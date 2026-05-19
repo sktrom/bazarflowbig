@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,7 @@ namespace Supermarket.Infrastructure.Repositories
         {
             return await _context.PurchaseInvoices
                 .Include(i => i.Supplier)
+                .Include(i => i.CompletedByEmployee)
                 .OrderByDescending(i => i.CreatedAt)
                 .ToListAsync();
         }
@@ -31,6 +33,16 @@ namespace Supermarket.Infrastructure.Repositories
             return await _context.PurchaseInvoices
                 .Include(i => i.Supplier)
                 .Include(i => i.CreatedByEmployee)
+                .Include(i => i.CompletedByEmployee)
+                .Include(i => i.Lines)
+                    .ThenInclude(line => line.Product)
+                .FirstOrDefaultAsync(i => i.Id == id);
+        }
+
+        public async Task<PurchaseInvoice?> GetByIdWithDetailsForCompletionAsync(long id)
+        {
+            return await _context.PurchaseInvoices
+                .Include(i => i.Supplier)
                 .Include(i => i.Lines)
                     .ThenInclude(line => line.Product)
                 .FirstOrDefaultAsync(i => i.Id == id);
@@ -115,6 +127,21 @@ namespace Supermarket.Infrastructure.Repositories
                 .ToListAsync();
         }
 
+        public async Task<bool> HasAnyBatchForPurchaseInvoiceLinesAsync(IEnumerable<long> lineIds)
+        {
+            var ids = lineIds.ToList();
+            if (!ids.Any()) return false;
+
+            return await _context.ProductBatches
+                .AnyAsync(batch => batch.PurchaseInvoiceLineId.HasValue && ids.Contains(batch.PurchaseInvoiceLineId.Value));
+        }
+
+        public async Task AddProductBatchesAsync(IEnumerable<ProductBatch> batches)
+        {
+            _context.ProductBatches.AddRange(batches);
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<int> GetInvoiceCountForDateAsync(DateTime dateUtc)
         {
             var nextDate = dateUtc.Date.AddDays(1);
@@ -145,9 +172,9 @@ namespace Supermarket.Infrastructure.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task ExecuteInTransactionAsync(Func<Task> operation)
+        public async Task ExecuteInTransactionAsync(Func<Task> operation, IsolationLevel isolationLevel = IsolationLevel.ReadCommitted)
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync();
+            await using var transaction = await _context.Database.BeginTransactionAsync(isolationLevel);
             await operation();
             await transaction.CommitAsync();
         }

@@ -13,6 +13,7 @@ namespace Supermarket.Application.PurchaseInvoices.Interfaces
         Task<PurchaseInvoiceDetailResponse> AddLineAsync(long invoiceId, CreatePurchaseInvoiceLineRequest request);
         Task<PurchaseInvoiceDetailResponse> UpdateLineAsync(long invoiceId, long lineId, UpdatePurchaseInvoiceLineRequest request);
         Task<DeletePurchaseInvoiceLineResponse> DeleteLineAsync(long invoiceId, long lineId);
+        Task<PurchaseInvoiceDetailResponse> CompleteAsync(long id);
         Task<PurchaseProductLookupResponse> LookupProductsAsync(string? search);
     }
 }

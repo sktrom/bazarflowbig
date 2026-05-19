@@ -15,6 +15,11 @@ namespace Supermarket.Domain.Entities
         public DateTime? EntryDate { get; set; }
         public DateTime? ExpiryDate { get; set; }
         public string? EntryInvoiceNumber { get; set; }
+
+        public long? PurchaseInvoiceLineId { get; set; }
+        public PurchaseInvoiceLine? PurchaseInvoiceLine { get; set; }
+
+        public decimal? UnitCostUsd { get; set; }
         
         public long EnteredByEmployeeId { get; set; }
         public Employee? EnteredByEmployee { get; set; }

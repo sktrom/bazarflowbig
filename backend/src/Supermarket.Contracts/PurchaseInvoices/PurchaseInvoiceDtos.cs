@@ -15,6 +15,9 @@ namespace Supermarket.Contracts.PurchaseInvoices
         public decimal TotalUsd { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public long? CompletedByEmployeeId { get; set; }
+        public string? CompletedByEmployeeName { get; set; }
     }
 
     public class PurchaseInvoiceListResponse
@@ -37,6 +40,9 @@ namespace Supermarket.Contracts.PurchaseInvoices
         public decimal TotalUsd { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public long? CompletedByEmployeeId { get; set; }
+        public string? CompletedByEmployeeName { get; set; }
         public List<PurchaseInvoiceLineDto> Lines { get; set; } = new();
     }
 
