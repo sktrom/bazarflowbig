@@ -35,6 +35,18 @@ namespace Supermarket.Application.Reports.Services
             return new SalesReportListResponse<SalesChartDto> { Items = items };
         }
 
+        public async Task<ProfitReportListResponse<ProfitSalesInvoiceDto>> GetProfitSalesAsync(DateTime? dateFrom, DateTime? dateTo)
+        {
+            var items = await _repository.GetProfitSalesAsync(dateFrom, dateTo);
+            return new ProfitReportListResponse<ProfitSalesInvoiceDto> { Items = items };
+        }
+
+        public async Task<ProfitReportListResponse<ProfitProductDto>> GetProfitProductsAsync(DateTime? dateFrom, DateTime? dateTo)
+        {
+            var items = await _repository.GetProfitProductsAsync(dateFrom, dateTo);
+            return new ProfitReportListResponse<ProfitProductDto> { Items = items };
+        }
+
         public async Task<ProductsReportListResponse<ProductSummaryReportDto>> GetProductsSummaryAsync(long? categoryId)
         {
             var items = await _repository.GetProductsSummaryAsync(categoryId);
@@ -88,6 +100,12 @@ namespace Supermarket.Application.Reports.Services
         {
             var items = await _repository.GetInventoryChartsAsync();
             return new InventoryReportListResponse<InventoryChartDto> { Items = items };
+        }
+
+        public async Task<ProfitReportListResponse<InventoryValuationDto>> GetInventoryValuationAsync(long? categoryId)
+        {
+            var items = await _repository.GetInventoryValuationAsync(categoryId);
+            return new ProfitReportListResponse<InventoryValuationDto> { Items = items };
         }
 
         public async Task<ExpiryReportListResponse<ExpirySummaryReportDto>> GetExpirySummaryAsync()

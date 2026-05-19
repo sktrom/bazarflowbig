@@ -16,6 +16,7 @@ describe('ReportsComponent', () => {
       'getProductsSummary', 'getProductsMovements', 'getProductsCharts',
       'getEmployeesSummary', 'getEmployeesActivity', 'getEmployeesCharts',
       'getInventorySummary', 'getInventoryBatches', 'getInventoryCharts',
+      'getProfitSales', 'getProfitProducts', 'getInventoryValuation',
       'getExpirySummary', 'getExpiryBatches', 'getExpiryCharts'
     ]);
 
@@ -108,6 +109,67 @@ describe('ReportsComponent', () => {
     component.ngOnDestroy();
     expect(window.clearTimeout).toHaveBeenCalledWith(12345);
     expect(component.chartTimeoutId).toBeNull();
+  });
+
+  it('should load profit tab data', () => {
+    apiSpy.getProfitSales.and.returnValue(of({ items: [] }));
+    apiSpy.getProfitProducts.and.returnValue(of({ items: [] }));
+    apiSpy.getInventoryValuation.and.returnValue(of({ items: [] }));
+
+    fixture.detectChanges();
+    component.switchTab('Profit');
+
+    expect(component.activeTab).toBe('Profit');
+    expect(apiSpy.getProfitSales).toHaveBeenCalled();
+    expect(apiSpy.getProfitProducts).toHaveBeenCalled();
+    expect(apiSpy.getInventoryValuation).toHaveBeenCalled();
+  });
+
+  it('should render missing cost warning and margin in profit tab', () => {
+    apiSpy.getProfitSales.and.returnValue(of({ items: [{
+      invoiceId: 1,
+      invoiceNumber: 'INV-1',
+      createdAt: '2026-05-20T00:00:00Z',
+      revenueUsd: 10,
+      knownCostUsd: 6,
+      profitUsd: 4,
+      marginPercent: 40,
+      hasMissingCost: true,
+      isProfitComplete: false,
+      missingCostQuantity: 1
+    }] }));
+    apiSpy.getProfitProducts.and.returnValue(of({ items: [{
+      productId: 1,
+      productName: 'Milk',
+      quantitySold: 2,
+      revenueUsd: 10,
+      knownCostUsd: 6,
+      profitUsd: 4,
+      marginPercent: 40,
+      hasMissingCost: true,
+      isProfitComplete: false,
+      missingCostQuantity: 1
+    }] }));
+    apiSpy.getInventoryValuation.and.returnValue(of({ items: [{
+      productId: 1,
+      productName: 'Milk',
+      categoryName: 'Dairy',
+      totalQuantityAvailable: 3,
+      knownCostQuantity: 2,
+      missingCostQuantity: 1,
+      knownStockValueUsd: 6,
+      hasMissingCost: true,
+      isValuationComplete: false
+    }] }));
+
+    fixture.detectChanges();
+    component.switchTab('Profit');
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('بعض النتائج غير محسوبة بالكامل');
+    expect(text).toContain('40.0%');
+    expect(text).toContain('Milk');
   });
 
 });

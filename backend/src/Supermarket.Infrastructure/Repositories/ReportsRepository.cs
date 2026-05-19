@@ -102,6 +102,68 @@ namespace Supermarket.Infrastructure.Repositories
             return grouped;
         }
 
+        public async Task<List<ProfitSalesInvoiceDto>> GetProfitSalesAsync(DateTime? dateFrom, DateTime? dateTo)
+        {
+            var lines = await GetProfitLineRowsAsync(dateFrom, dateTo);
+
+            return lines
+                .GroupBy(x => new { x.InvoiceId, x.InvoiceNumber, x.CreatedAt })
+                .Select(g =>
+                {
+                    var revenue = g.Sum(x => x.RevenueUsd);
+                    var cost = g.Sum(x => x.KnownCostUsd);
+                    var profit = revenue - cost;
+                    var missing = g.Sum(x => x.MissingCostQuantity);
+
+                    return new ProfitSalesInvoiceDto
+                    {
+                        InvoiceId = g.Key.InvoiceId,
+                        InvoiceNumber = g.Key.InvoiceNumber,
+                        CreatedAt = g.Key.CreatedAt,
+                        RevenueUsd = revenue,
+                        KnownCostUsd = cost,
+                        ProfitUsd = profit,
+                        MarginPercent = revenue > 0 ? (profit / revenue) * 100m : null,
+                        MissingCostQuantity = missing,
+                        HasMissingCost = missing > 0,
+                        IsProfitComplete = missing == 0
+                    };
+                })
+                .OrderByDescending(x => x.CreatedAt)
+                .ToList();
+        }
+
+        public async Task<List<ProfitProductDto>> GetProfitProductsAsync(DateTime? dateFrom, DateTime? dateTo)
+        {
+            var lines = await GetProfitLineRowsAsync(dateFrom, dateTo);
+
+            return lines
+                .GroupBy(x => new { x.ProductId, x.ProductName })
+                .Select(g =>
+                {
+                    var revenue = g.Sum(x => x.RevenueUsd);
+                    var cost = g.Sum(x => x.KnownCostUsd);
+                    var profit = revenue - cost;
+                    var missing = g.Sum(x => x.MissingCostQuantity);
+
+                    return new ProfitProductDto
+                    {
+                        ProductId = g.Key.ProductId,
+                        ProductName = g.Key.ProductName,
+                        QuantitySold = g.Sum(x => x.Quantity),
+                        RevenueUsd = revenue,
+                        KnownCostUsd = cost,
+                        ProfitUsd = profit,
+                        MarginPercent = revenue > 0 ? (profit / revenue) * 100m : null,
+                        MissingCostQuantity = missing,
+                        HasMissingCost = missing > 0,
+                        IsProfitComplete = missing == 0
+                    };
+                })
+                .OrderByDescending(x => x.RevenueUsd)
+                .ToList();
+        }
+
         // Products
 
         public async Task<List<ProductSummaryReportDto>> GetProductsSummaryAsync(long? categoryId)
@@ -354,6 +416,52 @@ namespace Supermarket.Infrastructure.Repositories
                 }).ToList();
         }
 
+        public async Task<List<InventoryValuationDto>> GetInventoryValuationAsync(long? categoryId)
+        {
+            var query = _context.Products
+                .Include(p => p.Category)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (categoryId.HasValue) query = query.Where(p => p.CategoryId == categoryId.Value);
+
+            var products = await query.ToListAsync();
+            var productIds = products.Select(p => p.Id).ToList();
+
+            var batchData = await _context.ProductBatches
+                .Where(b => productIds.Contains(b.ProductId) && b.QuantityAvailable > 0)
+                .GroupBy(b => b.ProductId)
+                .Select(g => new
+                {
+                    ProductId = g.Key,
+                    TotalQuantity = g.Sum(x => x.QuantityAvailable),
+                    KnownCostQuantity = g.Where(x => x.UnitCostUsd != null).Sum(x => x.QuantityAvailable),
+                    MissingCostQuantity = g.Where(x => x.UnitCostUsd == null).Sum(x => x.QuantityAvailable),
+                    KnownStockValueUsd = g.Where(x => x.UnitCostUsd != null).Sum(x => x.QuantityAvailable * x.UnitCostUsd!.Value)
+                })
+                .ToDictionaryAsync(x => x.ProductId);
+
+            return products.Select(p =>
+            {
+                batchData.TryGetValue(p.Id, out var data);
+                var totalQuantity = data?.TotalQuantity ?? 0m;
+                var missingQuantity = data?.MissingCostQuantity ?? 0m;
+
+                return new InventoryValuationDto
+                {
+                    ProductId = p.Id,
+                    ProductName = p.Name,
+                    CategoryName = p.Category?.Name ?? string.Empty,
+                    TotalQuantityAvailable = totalQuantity,
+                    KnownCostQuantity = data?.KnownCostQuantity ?? 0m,
+                    MissingCostQuantity = missingQuantity,
+                    KnownStockValueUsd = data?.KnownStockValueUsd ?? 0m,
+                    HasMissingCost = missingQuantity > 0,
+                    IsValuationComplete = missingQuantity == 0
+                };
+            }).ToList();
+        }
+
         // Expiry
 
         public async Task<List<ExpirySummaryReportDto>> GetExpirySummaryAsync(decimal expiryAlertDays)
@@ -422,6 +530,76 @@ namespace Supermarket.Infrastructure.Repositories
                     ExpiryStatus = g.Key,
                     BatchCount = g.Count()
                 }).ToList();
+        }
+
+        private async Task<List<ProfitLineRow>> GetProfitLineRowsAsync(DateTime? dateFrom, DateTime? dateTo)
+        {
+            var query = _context.InvoiceLines
+                .Include(il => il.Invoice)
+                .Include(il => il.Product)
+                .Where(il => il.Invoice != null &&
+                    il.Invoice.Status != InvoiceStatus.Working &&
+                    il.Invoice.Status != InvoiceStatus.Suspended &&
+                    il.Invoice.Status != InvoiceStatus.Cancelled)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (dateFrom.HasValue) query = query.Where(il => il.Invoice!.CreatedAt >= dateFrom.Value);
+            if (dateTo.HasValue) query = query.Where(il => il.Invoice!.CreatedAt <= dateTo.Value);
+
+            var rows = await query
+                .Select(il => new
+                {
+                    il.Id,
+                    il.ProductId,
+                    ProductName = il.Product != null ? il.Product.Name : string.Empty,
+                    InvoiceId = il.InvoiceId,
+                    InvoiceNumber = il.Invoice != null ? il.Invoice.InvoiceNumber : string.Empty,
+                    CreatedAt = il.Invoice != null ? il.Invoice.CreatedAt : DateTime.MinValue,
+                    il.Quantity,
+                    RevenueUsd = il.LineTotalUsdEffective,
+                    KnownCostUsd = _context.InvoiceLineBatchAllocations
+                        .Where(a => a.InvoiceLineId == il.Id &&
+                            a.AllocationStatus == AllocationStatus.Consumed &&
+                            a.Batch != null &&
+                            a.Batch.UnitCostUsd != null)
+                        .Sum(a => (decimal?)(a.Quantity * a.Batch!.UnitCostUsd!.Value)) ?? 0m,
+                    KnownCostQuantity = _context.InvoiceLineBatchAllocations
+                        .Where(a => a.InvoiceLineId == il.Id &&
+                            a.AllocationStatus == AllocationStatus.Consumed &&
+                            a.Batch != null &&
+                            a.Batch.UnitCostUsd != null)
+                        .Sum(a => (decimal?)a.Quantity) ?? 0m
+                })
+                .ToListAsync();
+
+            return rows.Select(row => new ProfitLineRow
+            {
+                InvoiceLineId = row.Id,
+                ProductId = row.ProductId,
+                ProductName = row.ProductName,
+                InvoiceId = row.InvoiceId,
+                InvoiceNumber = row.InvoiceNumber,
+                CreatedAt = row.CreatedAt,
+                Quantity = row.Quantity,
+                RevenueUsd = row.RevenueUsd,
+                KnownCostUsd = row.KnownCostUsd,
+                MissingCostQuantity = Math.Max(0m, row.Quantity - row.KnownCostQuantity)
+            }).ToList();
+        }
+
+        private class ProfitLineRow
+        {
+            public long InvoiceLineId { get; set; }
+            public long ProductId { get; set; }
+            public string ProductName { get; set; } = string.Empty;
+            public long InvoiceId { get; set; }
+            public string InvoiceNumber { get; set; } = string.Empty;
+            public DateTime CreatedAt { get; set; }
+            public decimal Quantity { get; set; }
+            public decimal RevenueUsd { get; set; }
+            public decimal KnownCostUsd { get; set; }
+            public decimal MissingCostQuantity { get; set; }
         }
     }
 }

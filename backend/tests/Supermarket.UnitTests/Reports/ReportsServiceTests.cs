@@ -58,5 +58,43 @@ namespace Supermarket.UnitTests.Reports
             _settingsMock.Verify(s => s.GetRequiredDecimalAsync("expiry_alert_days"), Times.Once);
             _repoMock.Verify(r => r.GetExpirySummaryAsync(30), Times.Once);
         }
+
+        [Fact]
+        public async Task GetProfitSales_ShouldCallRepository_WithDateFilters()
+        {
+            var date = DateTime.UtcNow.Date;
+            _repoMock.Setup(r => r.GetProfitSalesAsync(date, date)).ReturnsAsync(new List<ProfitSalesInvoiceDto>());
+
+            var service = CreateService();
+            var result = await service.GetProfitSalesAsync(date, date);
+
+            Assert.NotNull(result);
+            _repoMock.Verify(r => r.GetProfitSalesAsync(date, date), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetProfitProducts_ShouldCallRepository_WithDateFilters()
+        {
+            var date = DateTime.UtcNow.Date;
+            _repoMock.Setup(r => r.GetProfitProductsAsync(date, date)).ReturnsAsync(new List<ProfitProductDto>());
+
+            var service = CreateService();
+            var result = await service.GetProfitProductsAsync(date, date);
+
+            Assert.NotNull(result);
+            _repoMock.Verify(r => r.GetProfitProductsAsync(date, date), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetInventoryValuation_ShouldCallRepository_WithCategoryFilter()
+        {
+            _repoMock.Setup(r => r.GetInventoryValuationAsync(3)).ReturnsAsync(new List<InventoryValuationDto>());
+
+            var service = CreateService();
+            var result = await service.GetInventoryValuationAsync(3);
+
+            Assert.NotNull(result);
+            _repoMock.Verify(r => r.GetInventoryValuationAsync(3), Times.Once);
+        }
     }
 }

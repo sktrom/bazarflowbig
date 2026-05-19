@@ -39,6 +39,20 @@ namespace Supermarket.Api.Controllers
             return Ok(await _service.GetSalesChartsAsync(dateFrom, dateTo));
         }
 
+        // --- Profit Reports ---
+
+        [HttpGet("profit/sales")]
+        public async Task<IActionResult> GetProfitSales([FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo)
+        {
+            return Ok(await _service.GetProfitSalesAsync(dateFrom, dateTo));
+        }
+
+        [HttpGet("profit/products")]
+        public async Task<IActionResult> GetProfitProducts([FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo)
+        {
+            return Ok(await _service.GetProfitProductsAsync(dateFrom, dateTo));
+        }
+
         // --- Products Reports ---
 
         [HttpGet("products/summary")]
@@ -97,6 +111,12 @@ namespace Supermarket.Api.Controllers
         public async Task<IActionResult> GetInventoryCharts()
         {
             return Ok(await _service.GetInventoryChartsAsync());
+        }
+
+        [HttpGet("inventory/valuation")]
+        public async Task<IActionResult> GetInventoryValuation([FromQuery] long? categoryId)
+        {
+            return Ok(await _service.GetInventoryValuationAsync(categoryId));
         }
 
         // --- Expiry Reports ---

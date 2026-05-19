@@ -5,7 +5,7 @@ import { ReportsApiService } from '../services/reports-api.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import Chart from 'chart.js/auto';
 
-type TabType = 'Sales' | 'Products' | 'Employees' | 'Inventory' | 'Expiry';
+type TabType = 'Sales' | 'Products' | 'Employees' | 'Inventory' | 'Profit' | 'Expiry';
 
 @Component({
   selector: 'app-reports',
@@ -37,11 +37,11 @@ type TabType = 'Sales' | 'Products' | 'Employees' | 'Inventory' | 'Expiry';
         
         <!-- Filters (except Expiry) -->
         <div *ngIf="activeTab !== 'Expiry'" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-wrap gap-4 items-end">
-          <div *ngIf="['Sales', 'Products', 'Employees', 'Inventory'].includes(activeTab)">
+          <div *ngIf="['Sales', 'Products', 'Employees', 'Inventory', 'Profit'].includes(activeTab)">
             <label class="block text-xs font-medium text-slate-500 mb-1">من تاريخ</label>
             <input type="date" [(ngModel)]="filters.dateFrom" class="px-3 py-2 border border-slate-300 rounded-md focus:ring-primary focus:border-primary text-sm">
           </div>
-          <div *ngIf="['Sales', 'Products', 'Employees', 'Inventory'].includes(activeTab)">
+          <div *ngIf="['Sales', 'Products', 'Employees', 'Inventory', 'Profit'].includes(activeTab)">
             <label class="block text-xs font-medium text-slate-500 mb-1">إلى تاريخ</label>
             <input type="date" [(ngModel)]="filters.dateTo" class="px-3 py-2 border border-slate-300 rounded-md focus:ring-primary focus:border-primary text-sm">
           </div>
@@ -61,7 +61,7 @@ type TabType = 'Sales' | 'Products' | 'Employees' | 'Inventory' | 'Expiry';
             <label class="block text-xs font-medium text-slate-500 mb-1">رقم الموظف</label>
             <input type="number" [(ngModel)]="filters.employeeId" placeholder="الكل" class="w-32 px-3 py-2 border border-slate-300 rounded-md focus:ring-primary focus:border-primary text-sm">
           </div>
-          <div *ngIf="activeTab === 'Inventory' || activeTab === 'Products'">
+          <div *ngIf="activeTab === 'Inventory' || activeTab === 'Products' || activeTab === 'Profit'">
             <label class="block text-xs font-medium text-slate-500 mb-1">رقم التصنيف (للملخص)</label>
             <input type="number" [(ngModel)]="filters.categoryId" placeholder="الكل" class="w-32 px-3 py-2 border border-slate-300 rounded-md focus:ring-primary focus:border-primary text-sm">
           </div>
@@ -319,6 +319,127 @@ type TabType = 'Sales' | 'Products' | 'Employees' | 'Inventory' | 'Expiry';
               </div>
             </div>
 
+            <!-- 5. Profit -->
+            <div *ngSwitchCase="'Profit'" class="space-y-6">
+              <div *ngIf="profitHasMissingCost()" class="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm font-medium">
+                بعض النتائج غير محسوبة بالكامل بسبب دفعات قديمة أو يدوية بلا تكلفة. لا يتم استخدام تكلفة صفرية أو سعر البيع كبديل.
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                  <div class="text-xs text-slate-500">الإيرادات</div>
+                  <div class="text-xl font-bold text-slate-900 mt-1">{{ profitRevenueTotal() | currency:'USD' }}</div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                  <div class="text-xs text-slate-500">التكلفة المعروفة</div>
+                  <div class="text-xl font-bold text-slate-900 mt-1">{{ profitKnownCostTotal() | currency:'USD' }}</div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                  <div class="text-xs text-slate-500">الربح التشغيلي</div>
+                  <div class="text-xl font-bold mt-1" [class.text-green-700]="profitTotal() >= 0" [class.text-red-700]="profitTotal() < 0">
+                    {{ profitTotal() | currency:'USD' }}
+                  </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                  <div class="text-xs text-slate-500">هامش الربح</div>
+                  <div class="text-xl font-bold text-slate-900 mt-1">{{ profitMarginTotal() === null ? 'غير محسوب' : (profitMarginTotal() | number:'1.1-1') + '%' }}</div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                  <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-700">ربح الفواتير</div>
+                  <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm text-right">
+                      <thead class="text-xs text-slate-500 bg-white border-b border-slate-200">
+                        <tr>
+                          <th class="px-4 py-3">الفاتورة</th>
+                          <th class="px-4 py-3">التاريخ</th>
+                          <th class="px-4 py-3 text-center">الإيراد</th>
+                          <th class="px-4 py-3 text-center">التكلفة</th>
+                          <th class="px-4 py-3 text-center">الربح</th>
+                          <th class="px-4 py-3 text-center">الهامش</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        <tr *ngIf="!profitSales.length"><td colspan="6" class="px-4 py-6 text-center text-slate-400">لا توجد بيانات</td></tr>
+                        <tr *ngFor="let item of profitSales" class="hover:bg-slate-50">
+                          <td class="px-4 py-3">
+                            <div class="font-medium">{{ item.invoiceNumber }}</div>
+                            <div *ngIf="item.hasMissingCost" class="text-xs text-amber-700">غير محسوب بالكامل</div>
+                          </td>
+                          <td class="px-4 py-3 text-slate-500">{{ item.createdAt | date:'short' }}</td>
+                          <td class="px-4 py-3 text-center">{{ item.revenueUsd | currency:'USD' }}</td>
+                          <td class="px-4 py-3 text-center">{{ item.knownCostUsd | currency:'USD' }}</td>
+                          <td class="px-4 py-3 text-center font-semibold" [class.text-green-700]="item.profitUsd >= 0" [class.text-red-700]="item.profitUsd < 0">{{ item.profitUsd | currency:'USD' }}</td>
+                          <td class="px-4 py-3 text-center">{{ item.marginPercent === null || item.marginPercent === undefined ? 'غير محسوب' : (item.marginPercent | number:'1.1-1') + '%' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                  <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-700">ربح المنتجات</div>
+                  <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-sm text-right">
+                      <thead class="text-xs text-slate-500 bg-white border-b border-slate-200">
+                        <tr>
+                          <th class="px-4 py-3">المنتج</th>
+                          <th class="px-4 py-3 text-center">الكمية</th>
+                          <th class="px-4 py-3 text-center">الإيراد</th>
+                          <th class="px-4 py-3 text-center">التكلفة</th>
+                          <th class="px-4 py-3 text-center">الربح</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-slate-100">
+                        <tr *ngIf="!profitProducts.length"><td colspan="5" class="px-4 py-6 text-center text-slate-400">لا توجد بيانات</td></tr>
+                        <tr *ngFor="let item of profitProducts" class="hover:bg-slate-50">
+                          <td class="px-4 py-3">
+                            <div class="font-medium">{{ item.productName }}</div>
+                            <div *ngIf="item.hasMissingCost" class="text-xs text-amber-700">كمية بلا تكلفة: {{ item.missingCostQuantity }}</div>
+                          </td>
+                          <td class="px-4 py-3 text-center">{{ item.quantitySold }}</td>
+                          <td class="px-4 py-3 text-center">{{ item.revenueUsd | currency:'USD' }}</td>
+                          <td class="px-4 py-3 text-center">{{ item.knownCostUsd | currency:'USD' }}</td>
+                          <td class="px-4 py-3 text-center font-semibold" [class.text-green-700]="item.profitUsd >= 0" [class.text-red-700]="item.profitUsd < 0">{{ item.profitUsd | currency:'USD' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-slate-700">تقييم المخزون بالتكلفة</div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm text-right">
+                    <thead class="text-xs text-slate-500 bg-white border-b border-slate-200">
+                      <tr>
+                        <th class="px-4 py-3">المنتج</th>
+                        <th class="px-4 py-3">التصنيف</th>
+                        <th class="px-4 py-3 text-center">الكمية</th>
+                        <th class="px-4 py-3 text-center">كمية بتكلفة</th>
+                        <th class="px-4 py-3 text-center">كمية بلا تكلفة</th>
+                        <th class="px-4 py-3 text-center">قيمة التكلفة المعروفة</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                      <tr *ngIf="!inventoryValuation.length"><td colspan="6" class="px-4 py-6 text-center text-slate-400">لا توجد بيانات</td></tr>
+                      <tr *ngFor="let item of inventoryValuation" class="hover:bg-slate-50">
+                        <td class="px-4 py-3">{{ item.productName }}</td>
+                        <td class="px-4 py-3 text-slate-500">{{ item.categoryName }}</td>
+                        <td class="px-4 py-3 text-center">{{ item.totalQuantityAvailable }}</td>
+                        <td class="px-4 py-3 text-center">{{ item.knownCostQuantity }}</td>
+                        <td class="px-4 py-3 text-center" [class.text-amber-700]="item.hasMissingCost">{{ item.missingCostQuantity }}</td>
+                        <td class="px-4 py-3 text-center font-semibold">{{ item.knownStockValueUsd | currency:'USD' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
             <!-- 5. Expiry -->
             <div *ngSwitchCase="'Expiry'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
@@ -401,6 +522,7 @@ export class ReportsComponent implements OnInit, OnDestroy {
     { id: 'Products', label: 'المنتجات' },
     { id: 'Employees', label: 'الموظفون' },
     { id: 'Inventory', label: 'المخزون' },
+    { id: 'Profit', label: 'الربح' },
     { id: 'Expiry', label: 'الصلاحية' }
   ];
 
@@ -432,6 +554,9 @@ export class ReportsComponent implements OnInit, OnDestroy {
   
   inventorySummary: any[] = [];
   inventoryBatches: any[] = [];
+  inventoryValuation: any[] = [];
+  profitSales: any[] = [];
+  profitProducts: any[] = [];
   
   expirySummary: any[] = [];
   expiryBatches: any[] = [];
@@ -489,6 +614,9 @@ export class ReportsComponent implements OnInit, OnDestroy {
         break;
       case 'Inventory':
         this.loadInventory(f);
+        break;
+      case 'Profit':
+        this.loadProfit(f);
         break;
       case 'Expiry':
         this.loadExpiry();
@@ -628,6 +756,62 @@ export class ReportsComponent implements OnInit, OnDestroy {
       },
       error: errHandler
     });
+  }
+
+  private loadProfit(f: any) {
+    let pending = 3;
+    const checkDone = () => { pending--; if (pending === 0) this.isLoading = false; };
+    const errHandler = (e: any) => { this.showError(e); checkDone(); };
+
+    this.api.getProfitSales(f.dateFrom, f.dateTo).subscribe({
+      next: (res) => { this.profitSales = res.items || []; checkDone(); },
+      error: errHandler
+    });
+
+    this.api.getProfitProducts(f.dateFrom, f.dateTo).subscribe({
+      next: (res) => {
+        this.profitProducts = res.items || [];
+        if (this.profitProducts.length) {
+          this.isChartEmpty = false;
+          this.cdr.detectChanges();
+          this.chartTimeoutId = setTimeout(() => {
+            this.renderChart('bar', this.profitProducts.map(i => i.productName), this.profitProducts.map(i => i.profitUsd), 'الربح حسب المنتج (USD)');
+          });
+        } else {
+          this.isChartEmpty = true;
+        }
+        checkDone();
+      },
+      error: errHandler
+    });
+
+    this.api.getInventoryValuation(f.categoryId).subscribe({
+      next: (res) => { this.inventoryValuation = res.items || []; checkDone(); },
+      error: errHandler
+    });
+  }
+
+  profitRevenueTotal(): number {
+    return this.profitSales.reduce((sum, item) => sum + (item.revenueUsd || 0), 0);
+  }
+
+  profitKnownCostTotal(): number {
+    return this.profitSales.reduce((sum, item) => sum + (item.knownCostUsd || 0), 0);
+  }
+
+  profitTotal(): number {
+    return this.profitSales.reduce((sum, item) => sum + (item.profitUsd || 0), 0);
+  }
+
+  profitMarginTotal(): number | null {
+    const revenue = this.profitRevenueTotal();
+    return revenue > 0 ? (this.profitTotal() / revenue) * 100 : null;
+  }
+
+  profitHasMissingCost(): boolean {
+    return this.profitSales.some(item => item.hasMissingCost) ||
+      this.profitProducts.some(item => item.hasMissingCost) ||
+      this.inventoryValuation.some(item => item.hasMissingCost);
   }
 
   private loadExpiry() {

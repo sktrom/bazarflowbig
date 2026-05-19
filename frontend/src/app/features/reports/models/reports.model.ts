@@ -94,6 +94,45 @@ export interface InventoryChartDto {
   totalStockValueUsd: number;
 }
 
+export interface InventoryValuationDto {
+  productId: number;
+  productName: string;
+  categoryName: string;
+  totalQuantityAvailable: number;
+  knownCostQuantity: number;
+  missingCostQuantity: number;
+  knownStockValueUsd: number;
+  hasMissingCost: boolean;
+  isValuationComplete: boolean;
+}
+
+// --- Profit ---
+export interface ProfitSalesInvoiceDto {
+  invoiceId: number;
+  invoiceNumber: string;
+  createdAt: string;
+  revenueUsd: number;
+  knownCostUsd: number;
+  profitUsd: number;
+  marginPercent?: number | null;
+  hasMissingCost: boolean;
+  isProfitComplete: boolean;
+  missingCostQuantity: number;
+}
+
+export interface ProfitProductDto {
+  productId: number;
+  productName: string;
+  quantitySold: number;
+  revenueUsd: number;
+  knownCostUsd: number;
+  profitUsd: number;
+  marginPercent?: number | null;
+  hasMissingCost: boolean;
+  isProfitComplete: boolean;
+  missingCostQuantity: number;
+}
+
 // --- Expiry ---
 export interface ExpirySummaryReportDto {
   productId: number;

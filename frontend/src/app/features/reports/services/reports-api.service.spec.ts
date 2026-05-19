@@ -53,4 +53,36 @@ describe('ReportsApiService', () => {
     expect(req.request.method).toBe('GET');
     req.flush({ items: [] });
   });
+
+  it('should call profit sales with date params', () => {
+    service.getProfitSales('2026-01-01', '2026-01-31').subscribe();
+    const req = httpMock.expectOne(request =>
+      request.url === `${environment.apiUrl}/api/reports/profit/sales` &&
+      request.params.get('dateFrom') === '2026-01-01' &&
+      request.params.get('dateTo') === '2026-01-31'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({ items: [] });
+  });
+
+  it('should call profit products with date params', () => {
+    service.getProfitProducts('2026-01-01', '2026-01-31').subscribe();
+    const req = httpMock.expectOne(request =>
+      request.url === `${environment.apiUrl}/api/reports/profit/products` &&
+      request.params.get('dateFrom') === '2026-01-01' &&
+      request.params.get('dateTo') === '2026-01-31'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({ items: [] });
+  });
+
+  it('should call inventory valuation with category param', () => {
+    service.getInventoryValuation(3).subscribe();
+    const req = httpMock.expectOne(request =>
+      request.url === `${environment.apiUrl}/api/reports/inventory/valuation` &&
+      request.params.get('categoryId') === '3'
+    );
+    expect(req.request.method).toBe('GET');
+    req.flush({ items: [] });
+  });
 });

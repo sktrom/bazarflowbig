@@ -10,6 +10,8 @@ namespace Supermarket.Application.Reports.Interfaces
         Task<SalesReportListResponse<SalesInvoiceReportDto>> GetSalesInvoicesAsync(DateTime? dateFrom, DateTime? dateTo, string? status);
         Task<SalesReportListResponse<SalesItemReportDto>> GetSalesItemsAsync(DateTime? dateFrom, DateTime? dateTo);
         Task<SalesReportListResponse<SalesChartDto>> GetSalesChartsAsync(DateTime? dateFrom, DateTime? dateTo);
+        Task<ProfitReportListResponse<ProfitSalesInvoiceDto>> GetProfitSalesAsync(DateTime? dateFrom, DateTime? dateTo);
+        Task<ProfitReportListResponse<ProfitProductDto>> GetProfitProductsAsync(DateTime? dateFrom, DateTime? dateTo);
 
         // Products
         Task<ProductsReportListResponse<ProductSummaryReportDto>> GetProductsSummaryAsync(long? categoryId);
@@ -25,6 +27,7 @@ namespace Supermarket.Application.Reports.Interfaces
         Task<InventoryReportListResponse<InventorySummaryReportDto>> GetInventorySummaryAsync(long? categoryId);
         Task<InventoryReportListResponse<InventoryBatchReportDto>> GetInventoryBatchesAsync(DateTime? dateFrom, DateTime? dateTo);
         Task<InventoryReportListResponse<InventoryChartDto>> GetInventoryChartsAsync();
+        Task<ProfitReportListResponse<InventoryValuationDto>> GetInventoryValuationAsync(long? categoryId);
 
         // Expiry
         Task<ExpiryReportListResponse<ExpirySummaryReportDto>> GetExpirySummaryAsync();

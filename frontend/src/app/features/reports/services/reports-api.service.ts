@@ -16,6 +16,9 @@ import {
   InventorySummaryReportDto,
   InventoryBatchReportDto,
   InventoryChartDto,
+  InventoryValuationDto,
+  ProfitSalesInvoiceDto,
+  ProfitProductDto,
   ExpirySummaryReportDto,
   ExpiryBatchReportDto,
   ExpiryChartDto
@@ -48,6 +51,15 @@ export class ReportsApiService {
 
   getSalesCharts(dateFrom?: string, dateTo?: string): Observable<ReportList<SalesChartDto>> {
     return this.http.get<ReportList<SalesChartDto>>(`${this.baseUrl}/sales/charts`, { params: this.buildParams({ dateFrom, dateTo }) });
+  }
+
+  // --- Profit ---
+  getProfitSales(dateFrom?: string, dateTo?: string): Observable<ReportList<ProfitSalesInvoiceDto>> {
+    return this.http.get<ReportList<ProfitSalesInvoiceDto>>(`${this.baseUrl}/profit/sales`, { params: this.buildParams({ dateFrom, dateTo }) });
+  }
+
+  getProfitProducts(dateFrom?: string, dateTo?: string): Observable<ReportList<ProfitProductDto>> {
+    return this.http.get<ReportList<ProfitProductDto>>(`${this.baseUrl}/profit/products`, { params: this.buildParams({ dateFrom, dateTo }) });
   }
 
   // --- Products ---
@@ -87,6 +99,10 @@ export class ReportsApiService {
 
   getInventoryCharts(): Observable<ReportList<InventoryChartDto>> {
     return this.http.get<ReportList<InventoryChartDto>>(`${this.baseUrl}/inventory/charts`);
+  }
+
+  getInventoryValuation(categoryId?: number): Observable<ReportList<InventoryValuationDto>> {
+    return this.http.get<ReportList<InventoryValuationDto>>(`${this.baseUrl}/inventory/valuation`, { params: this.buildParams({ categoryId }) });
   }
 
   // --- Expiry ---
