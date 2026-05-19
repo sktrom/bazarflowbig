@@ -9,6 +9,9 @@ export interface PurchaseInvoiceListItem {
   totalUsd: number;
   createdAt: string;
   updatedAt: string;
+  completedAt?: string | null;
+  completedByEmployeeId?: number | null;
+  completedByEmployeeName?: string | null;
 }
 
 export interface PurchaseInvoiceListResponse {
@@ -29,6 +32,9 @@ export interface PurchaseInvoiceDetailResponse {
   totalUsd: number;
   createdAt: string;
   updatedAt: string;
+  completedAt?: string | null;
+  completedByEmployeeId?: number | null;
+  completedByEmployeeName?: string | null;
   lines: PurchaseInvoiceLineDto[];
 }
 

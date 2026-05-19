@@ -52,6 +52,10 @@ export class PurchaseInvoicesApiService {
     return this.http.delete<DeletePurchaseInvoiceLineResponse>(`${this.baseUrl}/${invoiceId}/lines/${lineId}`);
   }
 
+  complete(id: number): Observable<PurchaseInvoiceDetailResponse> {
+    return this.http.post<PurchaseInvoiceDetailResponse>(`${this.baseUrl}/${id}/complete`, {});
+  }
+
   productsLookup(search?: string): Observable<PurchaseProductLookupResponse> {
     let params = new HttpParams();
     if (search?.trim()) params = params.set('search', search.trim());

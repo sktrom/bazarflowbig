@@ -15,7 +15,7 @@ import {
 } from '../models/purchase-invoice.model';
 import { PurchaseInvoicesApiService } from '../services/purchase-invoices-api.service';
 
-type PurchaseModal = 'form' | 'details' | 'delete' | 'line' | null;
+type PurchaseModal = 'form' | 'details' | 'delete' | 'line' | 'complete' | null;
 
 interface PurchaseInvoiceForm {
   supplierId: number | null;
@@ -185,6 +185,14 @@ interface PurchaseLineForm {
             </div>
             <div class="flex items-center gap-2">
               <span class="px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700">{{ selectedInvoice.status }}</span>
+              <button
+                *ngIf="isDraft(selectedInvoice.status)"
+                class="btn-primary text-sm"
+                (click)="openCompleteModal()"
+                [disabled]="actionLoading || !selectedInvoice.lines.length"
+                [title]="!selectedInvoice.lines.length ? 'لا يمكن إتمام فاتورة بلا خطوط' : 'إتمام فاتورة الشراء'">
+                إتمام الفاتورة
+              </button>
               <button class="btn-secondary text-sm" (click)="closeModal()">إغلاق</button>
             </div>
           </div>
@@ -202,6 +210,14 @@ interface PurchaseLineForm {
                 <div class="bg-slate-50 rounded p-3">
                   <div class="text-slate-500 text-xs">أنشأها</div>
                   <div class="font-medium mt-1">{{ selectedInvoice.createdByEmployeeName }}</div>
+                </div>
+                <div *ngIf="selectedInvoice.completedAt" class="bg-slate-50 rounded p-3">
+                  <div class="text-slate-500 text-xs">تم الإتمام</div>
+                  <div class="font-medium mt-1">{{ selectedInvoice.completedAt | date:'yyyy-MM-dd HH:mm' }}</div>
+                </div>
+                <div *ngIf="selectedInvoice.completedByEmployeeName" class="bg-slate-50 rounded p-3">
+                  <div class="text-slate-500 text-xs">أتمها</div>
+                  <div class="font-medium mt-1">{{ selectedInvoice.completedByEmployeeName }}</div>
                 </div>
                 <div class="bg-slate-50 rounded p-3">
                   <div class="text-slate-500 text-xs">Subtotal USD</div>
@@ -313,6 +329,23 @@ interface PurchaseLineForm {
             <button class="btn-danger text-sm" (click)="confirmDelete()" [disabled]="actionLoading">تأكيد</button>
           </div>
         </div>
+
+        <div *ngIf="activeModal === 'complete'" class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+          <div class="p-4 border-b border-amber-100 bg-amber-50 font-bold text-amber-800">تأكيد إتمام فاتورة الشراء</div>
+          <div class="p-4 text-slate-700 text-sm space-y-3">
+            <div>
+              هل تريد إتمام فاتورة الشراء "{{ completeCandidate?.invoiceNumber }}" للمورد "{{ completeCandidate?.supplierName }}"؟
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded p-3 text-slate-600">
+              سيتم إنشاء دفعات منتجات وزيادة المخزون. لا يمكن تعديل الفاتورة بعد الإتمام.
+            </div>
+          </div>
+          <div *ngIf="formErr" class="mx-4 mb-4 bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm">{{ formErr }}</div>
+          <div class="p-4 bg-slate-50 flex gap-2 justify-end border-t border-slate-100">
+            <button class="btn-secondary text-sm" (click)="returnToDetails()" [disabled]="actionLoading">إلغاء</button>
+            <button class="btn-primary text-sm" (click)="confirmComplete()" [disabled]="actionLoading">تأكيد الإتمام</button>
+          </div>
+        </div>
       </div>
     </div>
   `
@@ -343,6 +376,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
   formData: PurchaseInvoiceForm = this.emptyInvoiceForm();
   deleteCandidate: PurchaseInvoiceListItem | null = null;
   selectedInvoice: PurchaseInvoiceDetailResponse | null = null;
+  completeCandidate: PurchaseInvoiceDetailResponse | null = null;
 
   productSearch = '';
   lookupItems: PurchaseProductLookupItem[] = [];
@@ -552,6 +586,39 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     });
   }
 
+  openCompleteModal(): void {
+    if (!this.selectedInvoice || !this.isDraft(this.selectedInvoice.status) || !this.selectedInvoice.lines.length) {
+      return;
+    }
+
+    this.completeCandidate = this.selectedInvoice;
+    this.formErr = '';
+    this.activeModal = 'complete';
+  }
+
+  confirmComplete(): void {
+    if (!this.completeCandidate) {
+      return;
+    }
+
+    this.actionLoading = true;
+    this.formErr = '';
+    this.api.complete(this.completeCandidate.id).subscribe({
+      next: detail => {
+        this.selectedInvoice = detail;
+        this.completeCandidate = null;
+        this.activeModal = 'details';
+        this.toast = 'تم إتمام فاتورة الشراء وتحديث المخزون';
+        this.actionLoading = false;
+        this.loadInvoices();
+      },
+      error: error => {
+        this.formErr = this.mapError(error);
+        this.actionLoading = false;
+      }
+    });
+  }
+
   openAddLineModal(): void {
     if (!this.selectedInvoice || !this.isDraft(this.selectedInvoice.status)) {
       return;
@@ -685,6 +752,7 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.activeModal = null;
     this.editId = null;
     this.deleteCandidate = null;
+    this.completeCandidate = null;
     this.formErr = '';
     this.lineErr = '';
   }
@@ -702,21 +770,25 @@ export class PurchasesComponent implements OnInit, OnDestroy {
       case 'SUPPLIER_INACTIVE':
         return 'المورد غير نشط';
       case 'PURCHASE_INVOICE_NOT_DRAFT':
-        return 'يمكن تعديل المسودات فقط';
+        return 'يمكن إتمام المسودات فقط';
+      case 'PURCHASE_INVOICE_ALREADY_COMPLETED':
+        return 'تم إتمام هذه الفاتورة مسبقًا';
+      case 'PURCHASE_INVOICE_HAS_NO_LINES':
+        return 'لا يمكن إتمام فاتورة بلا خطوط';
       case 'PURCHASE_INVOICE_LINE_NOT_FOUND':
         return 'سطر الفاتورة غير موجود';
       case 'PRODUCT_NOT_FOUND':
         return 'المنتج غير موجود';
       case 'PRODUCT_INACTIVE':
-        return 'المنتج غير نشط';
+        return 'أحد المنتجات غير نشط';
       case 'INVALID_QUANTITY':
         return 'الكمية يجب أن تكون أكبر من صفر';
       case 'INVALID_UNIT_COST':
         return 'تكلفة الوحدة غير صالحة';
       case 'EXPIRY_DATE_REQUIRED':
-        return 'تاريخ الصلاحية مطلوب لهذا المنتج';
+        return 'تاريخ الصلاحية مطلوب لأحد المنتجات';
       case 'EXPIRY_DATE_NOT_ALLOWED':
-        return 'هذا المنتج لا يدعم تاريخ الصلاحية';
+        return 'أحد المنتجات لا يدعم تاريخ الصلاحية';
       case 'PURCHASE_INVOICE_NUMBER_ALREADY_EXISTS':
         return 'رقم فاتورة الشراء موجود مسبقًا';
       default:

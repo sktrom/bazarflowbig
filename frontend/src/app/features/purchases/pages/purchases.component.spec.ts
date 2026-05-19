@@ -89,12 +89,14 @@ describe('PurchasesComponent', () => {
       'addLine',
       'updateLine',
       'deleteLine',
+      'complete',
       'productsLookup'
     ]);
     suppliersApiSpy = jasmine.createSpyObj('SuppliersApiService', ['getSuppliers']);
 
     apiSpy.getAll.and.returnValue(of({ items: invoices }));
     apiSpy.getById.and.returnValue(of(detail));
+    apiSpy.complete.and.returnValue(of({ ...detail, status: 'Completed', completedAt: '2026-05-19T11:00:00Z', completedByEmployeeName: 'Cashier One' }));
     apiSpy.productsLookup.and.returnValue(of({ items: [] }));
     suppliersApiSpy.getSuppliers.and.returnValue(of({ items: suppliers }));
 
@@ -302,6 +304,92 @@ describe('PurchasesComponent', () => {
 
     component.saveLine();
 
-    expect(component.lineErr).toBe('تاريخ الصلاحية مطلوب لهذا المنتج');
+    expect(component.lineErr).toBe('تاريخ الصلاحية مطلوب لأحد المنتجات');
+  });
+
+  it('should show complete button for draft invoices with lines', () => {
+    component.selectedInvoice = detail;
+    component.activeModal = 'details';
+    fixture.detectChanges();
+
+    const button = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'))
+      .find(element => element.textContent?.includes('إتمام الفاتورة'));
+
+    expect(button).toBeTruthy();
+    expect(button?.disabled).toBeFalse();
+  });
+
+  it('should disable complete button for draft invoices without lines', () => {
+    component.selectedInvoice = { ...detail, lines: [] };
+    component.activeModal = 'details';
+    fixture.detectChanges();
+
+    const button = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button'))
+      .find(element => element.textContent?.includes('إتمام الفاتورة'));
+
+    expect(button).toBeTruthy();
+    expect(button?.disabled).toBeTrue();
+  });
+
+  it('should hide complete button for completed invoices', () => {
+    component.selectedInvoice = { ...detail, status: 'Completed' };
+    component.activeModal = 'details';
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('إتمام الفاتورة');
+  });
+
+  it('should open complete confirmation modal with invoice and supplier details', () => {
+    component.selectedInvoice = detail;
+
+    component.openCompleteModal();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(component.activeModal).toBe('complete');
+    expect(text).toContain('تأكيد إتمام فاتورة الشراء');
+    expect(text).toContain('PI-20260519-000001');
+    expect(text).toContain('Alpha Supplier');
+  });
+
+  it('should complete purchase invoice and refresh list', () => {
+    const completed = { ...detail, status: 'Completed', completedAt: '2026-05-19T11:00:00Z', completedByEmployeeName: 'Cashier One' };
+    apiSpy.complete.and.returnValue(of(completed));
+    apiSpy.getAll.calls.reset();
+    component.selectedInvoice = detail;
+    component.openCompleteModal();
+
+    component.confirmComplete();
+
+    expect(apiSpy.complete).toHaveBeenCalledWith(1);
+    expect(component.selectedInvoice?.status).toBe('Completed');
+    expect(component.activeModal).toBe('details');
+    expect(component.toast).toBe('تم إتمام فاتورة الشراء وتحديث المخزون');
+    expect(apiSpy.getAll).toHaveBeenCalled();
+  });
+
+  it('should keep completed invoice read-only after complete success', () => {
+    apiSpy.complete.and.returnValue(of({ ...detail, status: 'Completed' }));
+    component.selectedInvoice = detail;
+    component.openCompleteModal();
+
+    component.confirmComplete();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('هذه الفاتورة غير قابلة للتعديل');
+    expect(text).not.toContain('إضافة خط');
+  });
+
+  it('should show complete backend errors in Arabic', () => {
+    const error = new HttpErrorResponse({ status: 400, error: { error: 'PURCHASE_INVOICE_HAS_NO_LINES' } });
+    apiSpy.complete.and.returnValue(throwError(() => error));
+    component.selectedInvoice = detail;
+    component.openCompleteModal();
+
+    component.confirmComplete();
+
+    expect(component.formErr).toBe('لا يمكن إتمام فاتورة بلا خطوط');
+    expect(component.activeModal).toBe('complete');
   });
 });

@@ -101,6 +101,15 @@ describe('PurchaseInvoicesApiService', () => {
     req.flush({ id: 1, lines: [] });
   });
 
+  it('should complete purchase invoice by id', () => {
+    service.complete(1).subscribe();
+
+    const req = httpMock.expectOne(`${baseUrl}/1/complete`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    req.flush({ id: 1, status: 'Completed', lines: [] });
+  });
+
   it('should lookup products with search query', () => {
     service.productsLookup('milk').subscribe();
 
