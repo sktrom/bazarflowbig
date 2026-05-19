@@ -86,5 +86,43 @@ namespace Supermarket.Infrastructure.Repositories
                 .AsNoTracking()
                 .ToListAsync();
         }
+
+        public async Task<List<(Product Product, decimal TotalQuantityAvailable)>> GetProductsWithStockLevelsAsync()
+        {
+            var query = _context.Products
+                .AsNoTracking()
+                .Select(p => new
+                {
+                    Product = p,
+                    TotalQty = _context.ProductBatches.Where(b => b.ProductId == p.Id).Sum(b => (decimal?)b.QuantityAvailable) ?? 0m
+                });
+
+            var result = await query.ToListAsync();
+            return result.Select(x => (x.Product, x.TotalQty)).ToList();
+        }
+
+        public async Task<List<(ProductBatch Batch, Product Product)>> GetBatchesWithExpiryAsync()
+        {
+            var query = _context.ProductBatches
+                .Include(b => b.Product)
+                .Where(b => b.QuantityAvailable > 0 && b.ExpiryDate != null)
+                .AsNoTracking();
+
+            var result = await query.ToListAsync();
+            return result.Select(b => (b, b.Product!)).ToList();
+        }
+
+        public async Task<List<long>> GetProductsWithZeroSalesLast30DaysAsync()
+        {
+            var thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
+            
+            // Products with stock > 0 but NO sales in the last 30 days
+            var query = _context.Products
+                .Where(p => _context.ProductBatches.Where(b => b.ProductId == p.Id).Sum(b => (decimal?)b.QuantityAvailable) > 0)
+                .Where(p => !_context.InvoiceLines.Any(il => il.ProductId == p.Id && il.Invoice != null && il.Invoice.CreatedAt >= thirtyDaysAgo))
+                .Select(p => p.Id);
+
+            return await query.ToListAsync();
+        }
     }
 }

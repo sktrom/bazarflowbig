@@ -54,6 +54,7 @@ namespace Supermarket.Application
             services.AddScoped<IInvoicesQueryService, InvoicesQueryService>();
             services.AddScoped<IAdjustmentRequestService, AdjustmentRequestService>();
             services.AddScoped<IInventoryQueryService, InventoryQueryService>();
+            services.AddScoped<IActionCenterService, ActionCenterService>();
             services.AddScoped<IReportsService, ReportsService>();
             
             services.AddScoped<IExportFormatBuilder, ExportFormatBuilder>();

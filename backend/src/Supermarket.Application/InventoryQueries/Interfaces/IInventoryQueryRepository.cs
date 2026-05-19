@@ -19,5 +19,9 @@ namespace Supermarket.Application.InventoryQueries.Interfaces
         Task<Product?> GetProductByIdAsync(long productId);
         
         Task<List<ProductBatch>> GetProductBatchesAsync(long productId);
+        
+        Task<List<(Product Product, decimal TotalQuantityAvailable)>> GetProductsWithStockLevelsAsync();
+        Task<List<(ProductBatch Batch, Product Product)>> GetBatchesWithExpiryAsync();
+        Task<List<long>> GetProductsWithZeroSalesLast30DaysAsync();
     }
 }

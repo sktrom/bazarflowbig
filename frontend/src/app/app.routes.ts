@@ -52,6 +52,13 @@ export const routes: Routes = [
           import('./features/inventory/pages/inventory-list.component').then(m => m.InventoryListComponent)
       },
       {
+        path: 'inventory/action-center',
+        canActivate: [ScreenPermissionGuard],
+        data: { screenKey: 'Inventory' },
+        loadComponent: () =>
+          import('./features/inventory/pages/action-center/action-center.component').then(m => m.ActionCenterComponent)
+      },
+      {
         path: 'offers',
         canActivate: [ScreenPermissionGuard],
         data: { screenKey: 'Offers' },
