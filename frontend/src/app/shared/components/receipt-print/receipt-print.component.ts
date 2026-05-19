@@ -63,31 +63,27 @@ export interface ReceiptPrintInvoice {
         </div>
       </div>
 
-      <table class="receipt-lines">
-        <thead>
-          <tr>
-            <th class="product-col">المادة</th>
-            <th>الكمية</th>
-            <th>السعر</th>
-            <th>الخصم</th>
-            <th>الإجمالي</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr *ngFor="let line of sortedLines(invoice.lines)">
-            <td class="product-col">
-              <div class="product-name">{{ line.productName }}</div>
-              <div *ngIf="line.isPriceOverridden || line.offerId" class="line-note">
-                {{ line.isPriceOverridden ? 'سعر معدل' : 'عرض #' + line.offerId }}
-              </div>
-            </td>
-            <td class="num">{{ line.quantity | number:'1.0-3' }}</td>
-            <td class="num">{{ line.unitPriceUsdOriginal | number:'1.2-2' }} $</td>
-            <td class="num">{{ lineDiscount(line) | number:'1.2-2' }} $</td>
-            <td class="num">{{ line.lineTotalUsdEffective | number:'1.2-2' }} $</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="receipt-lines" aria-label="المنتجات">
+        <div class="lines-heading">
+          <span>المنتجات</span>
+          <span>الإجمالي</span>
+        </div>
+        <div *ngFor="let line of sortedLines(invoice.lines)" class="receipt-line">
+          <div class="product-name">{{ line.productName }}</div>
+          <div class="line-equation">
+            <span class="num">{{ line.quantity | number:'1.0-3' }}</span>
+            <span>×</span>
+            <span class="num">{{ line.unitPriceUsdOriginal | number:'1.2-2' }} $</span>
+            <span>=</span>
+            <strong class="num">{{ line.lineTotalUsdEffective | number:'1.2-2' }} $</strong>
+          </div>
+          <div *ngIf="lineDiscount(line) > 0 || line.isPriceOverridden || line.offerId" class="line-note">
+            <span *ngIf="lineDiscount(line) > 0">خصم السطر: {{ lineDiscount(line) | number:'1.2-2' }} $</span>
+            <span *ngIf="line.isPriceOverridden">سعر معدل</span>
+            <span *ngIf="line.offerId">عرض #{{ line.offerId }}</span>
+          </div>
+        </div>
+      </div>
 
       <div class="receipt-totals">
         <div>
@@ -135,34 +131,36 @@ export interface ReceiptPrintInvoice {
     }
 
     .receipt-print-root {
-      width: min(100%, 420px);
+      width: 80mm;
+      max-width: 100%;
       margin: 0 auto;
       background: #fff;
-      color: #111827;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 16px;
-      font-size: 12px;
-      line-height: 1.6;
+      color: #000;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 11px;
+      line-height: 1.45;
+      font-family: Arial, Tahoma, sans-serif;
     }
 
     .receipt-header {
       text-align: center;
-      border-bottom: 1px dashed #94a3b8;
-      padding-bottom: 10px;
-      margin-bottom: 12px;
+      border-bottom: 1px dashed #000;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
     }
 
     .store-name {
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 800;
       letter-spacing: 0;
     }
 
     .receipt-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      color: #334155;
+      color: #111;
     }
 
     .receipt-tag {
@@ -171,14 +169,14 @@ export interface ReceiptPrintInvoice {
       padding: 2px 8px;
       border: 1px solid #cbd5e1;
       border-radius: 999px;
-      color: #475569;
-      font-size: 11px;
+      color: #111;
+      font-size: 10px;
     }
 
     .receipt-meta,
     .receipt-totals {
       display: grid;
-      gap: 6px;
+      gap: 4px;
     }
 
     .receipt-meta > div,
@@ -191,7 +189,7 @@ export interface ReceiptPrintInvoice {
 
     .receipt-meta span,
     .receipt-totals span {
-      color: #64748b;
+      color: #111;
       white-space: nowrap;
     }
 
@@ -204,55 +202,74 @@ export interface ReceiptPrintInvoice {
     }
 
     .receipt-lines {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 14px 0;
-      table-layout: fixed;
+      margin: 10px 0;
+      border-top: 1px dashed #000;
+      border-bottom: 1px dashed #000;
     }
 
-    .receipt-lines th,
-    .receipt-lines td {
+    .lines-heading,
+    .receipt-line {
       border-bottom: 1px solid #e5e7eb;
-      padding: 6px 4px;
-      vertical-align: top;
     }
 
-    .receipt-lines th {
-      color: #475569;
-      font-size: 11px;
+    .lines-heading {
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 0;
+      color: #111;
+      font-size: 10px;
       font-weight: 700;
     }
 
-    .product-col {
-      width: 34%;
-      text-align: right;
+    .receipt-line {
+      padding: 6px 0;
+    }
+
+    .receipt-line:last-child {
+      border-bottom: 0;
     }
 
     .product-name {
       overflow-wrap: anywhere;
       font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .line-equation {
+      display: flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      gap: 4px;
+      direction: ltr;
+      unicode-bidi: plaintext;
+      color: #111;
     }
 
     .line-note {
-      color: #64748b;
+      color: #334155;
       font-size: 10px;
       font-weight: 500;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
     }
 
     .grand-total {
-      border-top: 1px dashed #94a3b8;
+      border-top: 1px dashed #000;
       padding-top: 6px;
       margin-top: 2px;
       font-size: 13px;
     }
 
     .receipt-footer {
-      margin-top: 14px;
-      padding-top: 10px;
-      border-top: 1px dashed #94a3b8;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed #000;
       text-align: center;
-      color: #475569;
+      color: #111;
       font-weight: 600;
+      font-size: 10px;
     }
   `]
 })

@@ -55,7 +55,7 @@ describe('ReceiptPrintComponent', () => {
     component = fixture.componentInstance;
   });
 
-  it('renders receipt metadata, lines, totals, and derived discounts', () => {
+  it('renders receipt metadata', () => {
     component.invoice = invoice;
     fixture.detectChanges();
 
@@ -64,14 +64,42 @@ describe('ReceiptPrintComponent', () => {
     expect(text).toContain('INV-00012');
     expect(text).toContain('Ahmad');
     expect(text).toContain('Cashier One');
+    expect(text).toContain('2026-05-18');
+  });
+
+  it('renders line items in thermal layout', () => {
+    component.invoice = invoice;
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+
     expect(text).toContain('First Product');
     expect(text).toContain('Long Product Name');
     expect(text).toContain('1.50 $');
+    expect(text).toContain('18.50 $');
+    expect(text.indexOf('First Product')).toBeLessThan(text.indexOf('Long Product Name'));
+  });
+
+  it('renders totals in USD and SYP', () => {
+    component.invoice = invoice;
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+
     expect(text).toContain('3.50 $');
     expect(text).toContain('15.00 $');
     expect(text).toContain('10,000');
     expect(text).toMatch(/150,000\s+ل\.س/);
-    expect(text.indexOf('First Product')).toBeLessThan(text.indexOf('Long Product Name'));
+  });
+
+  it('shows line discount only when present', () => {
+    component.invoice = invoice;
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent;
+
+    expect(text).toContain('خصم السطر: 1.50 $');
+    expect(text).not.toContain('خصم السطر: 0.00 $');
   });
 
   it('renders fallbacks when customer, employee, SYP total, and exchange rate are unavailable', () => {
@@ -92,5 +120,13 @@ describe('ReceiptPrintComponent', () => {
     expect(text).toContain('زبون نقدي');
     expect(text).toContain('#7');
     expect(missingValueCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('renders reprint badge when reprint is true', () => {
+    component.invoice = invoice;
+    component.reprint = true;
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('نسخة إعادة طباعة');
   });
 });

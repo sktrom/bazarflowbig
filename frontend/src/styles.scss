@@ -41,7 +41,8 @@
 
 @media print {
   @page {
-    margin: 8mm;
+    size: 80mm auto;
+    margin: 0;
   }
 
   html,
@@ -69,6 +70,9 @@
 
   app-receipt-print {
     display: block !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
   }
 
   app-receipt-print.print-only {
@@ -76,15 +80,25 @@
   }
 
   .receipt-print-root {
-    position: fixed !important;
-    inset: 0 0 auto 0 !important;
+    position: static !important;
     width: 80mm !important;
-    max-width: 100% !important;
+    max-width: 80mm !important;
     margin: 0 auto !important;
+    padding: 3mm !important;
     border: 0 !important;
     border-radius: 0 !important;
     box-shadow: none !important;
     color: #000 !important;
     background: #fff !important;
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    direction: rtl !important;
+  }
+
+  .receipt-print-root * {
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
 }
