@@ -53,6 +53,9 @@ namespace Supermarket.Application.Auth.Services
             if (!device.IsActive)
                 throw new InvalidOperationException("DEVICE_INACTIVE");
 
+            device.LastLoginAt = DateTime.UtcNow;
+            await _deviceRepo.UpdateAsync(device);
+
             var existingActive = await _sessionRepo.GetActiveByEmployeeIdAsync(employee.Id);
             if (existingActive != null)
                 throw new InvalidOperationException("EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION");
