@@ -24,11 +24,14 @@ describe('SettingsComponent', () => {
   beforeEach(async () => {
     const spy = jasmine.createSpyObj('SettingsApiService', [
       'getEmployees','getEmployee','createEmployee','updateEmployee','deleteEmployee','resetPassword',
-      'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings','createBackup'
+      'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings','createBackup',
+      'getAuditLogs','getAuditLog'
     ]);
     spy.getEmployees.and.returnValue(of({ items: mockEmployees }));
     spy.getCategories.and.returnValue(of({ items: [] }));
     spy.getPublicSettings.and.returnValue(of({ storeName: 'Test Store', exchangeRate: 15000 }));
+    spy.getAuditLogs.and.returnValue(of({ items: [], totalCount: 0, page: 1, pageSize: 50 }));
+    spy.getAuditLog.and.returnValue(of({ id: 1, action: 'CREATE', entityType: 'Product', createdAt: '2026-05-20T14:30:12', hasBefore: false, hasAfter: false, hasMetadata: false }));
 
     await TestBed.configureTestingModule({
       imports: [SettingsComponent, FormsModule],
@@ -154,5 +157,75 @@ describe('SettingsComponent', () => {
     component.activeModal = 'catCreate';
     component.saveCategory();
     expect(component.formErr).toBe('اسم التصنيف موجود مسبقًا');
+  });
+
+  it('should render audit logs tab and switch successfully', () => {
+    component.switchTab('audit');
+    expect(component.activeTab).toBe('audit');
+    expect(apiSpy.getAuditLogs).toHaveBeenCalled();
+  });
+
+  it('should load audit logs with filter params when filtered', () => {
+    component.switchTab('audit');
+    component.filterAction = 'CREATE';
+    component.filterEntityType = 'Product';
+    component.filterEmployeeId = 5;
+    component.filterDateFrom = '2026-05-01';
+    component.filterDateTo = '2026-05-31';
+
+    component.loadAuditLogs();
+    
+    expect(apiSpy.getAuditLogs).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 50,
+      action: 'CREATE',
+      entityType: 'Product',
+      employeeId: 5,
+      dateFrom: new Date('2026-05-01').toISOString(),
+      dateTo: new Date('2026-05-31').toISOString()
+    });
+  });
+
+  it('should paginate to next page', () => {
+    component.auditPage = 1;
+    component.auditPageSize = 50;
+    component.auditTotalCount = 120;
+    
+    component.changeAuditPage(1);
+    expect(component.auditPage).toBe(2);
+    expect(apiSpy.getAuditLogs).toHaveBeenCalled();
+  });
+
+  it('should open audit detail modal and show detail response', () => {
+    const mockDetailResponse = {
+      id: 77,
+      action: 'CREATE_BACKUP',
+      entityType: 'Backup',
+      createdAt: '2026-05-20T14:30:12',
+      hasBefore: false,
+      hasAfter: false,
+      hasMetadata: true,
+      metadataJson: '{"file":"test.bak"}'
+    };
+    apiSpy.getAuditLog.and.returnValue(of(mockDetailResponse));
+
+    component.openAuditDetail(77);
+    expect(apiSpy.getAuditLog).toHaveBeenCalledWith(77);
+    expect(component.selectedAuditLog?.action).toBe('CREATE_BACKUP');
+    expect(component.activeModal).toBe('auditDetail');
+  });
+
+  it('should display empty state when audit logs count is zero', () => {
+    component.switchTab('audit');
+    component.auditLogs = [];
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('لا توجد سجلات مطابقة للفلاتر المحددة.');
+  });
+
+  it('should translate actions to Arabic', () => {
+    expect(component.translateAction('CREATE_BACKUP')).toBe('إنشاء نسخة احتياطية');
+    expect(component.translateAction('RESET_PASSWORD')).toBe('إعادة تعيين كلمة المرور');
+    expect(component.translateAction('UNKNOWN_ACTION')).toBe('UNKNOWN_ACTION');
   });
 });

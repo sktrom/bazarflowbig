@@ -49,6 +49,7 @@ namespace Supermarket.Application
         {
             // Application services only — NO EF / DbContext / Infrastructure types here
             services.AddScoped<IAuditLogService, AuditLogService>();
+            services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<ISessionService, SessionService>();

@@ -8,7 +8,8 @@ import {
   DeleteEmployeeResponse, ResetPasswordRequest, ResetPasswordResponse,
   CategoryListResponse, CategoryItem,
   CreateCategoryRequest, UpdateCategoryRequest, DeleteCategoryResponse,
-  PublicSettingsResponse, CreateBackupResponse
+  PublicSettingsResponse, CreateBackupResponse,
+  AuditLogListResponse, AuditLogDetailResponse
 } from '../models/settings.model';
 
 @Injectable({ providedIn: 'root' })
@@ -17,6 +18,7 @@ export class SettingsApiService {
   private readonly cat = `${environment.apiUrl}/api/categories`;
   private readonly pub = `${environment.apiUrl}/api/settings/public`;
   private readonly backup = `${environment.apiUrl}/api/system/backup`;
+  private readonly audit = `${environment.apiUrl}/api/audit-logs`;
 
   constructor(private http: HttpClient) {}
 
@@ -69,5 +71,14 @@ export class SettingsApiService {
 
   createBackup(): Observable<CreateBackupResponse> {
     return this.http.post<CreateBackupResponse>(this.backup, {});
+  }
+
+  // --- Audit Logs ---
+  getAuditLogs(params: any): Observable<AuditLogListResponse> {
+    return this.http.get<AuditLogListResponse>(this.audit, { params });
+  }
+
+  getAuditLog(id: number): Observable<AuditLogDetailResponse> {
+    return this.http.get<AuditLogDetailResponse>(`${this.audit}/${id}`);
   }
 }

@@ -3,10 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SettingsApiService } from '../services/settings-api.service';
-import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse } from '../models/settings.model';
+import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse } from '../models/settings.model';
 
-type TabType = 'employees' | 'categories' | 'store' | 'backup';
-type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | null;
+type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit';
+type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | null;
 
 const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings'];
 
@@ -163,6 +163,93 @@ function mapErr(e: HttpErrorResponse): string {
           </div>
         </div>
       </div>
+
+      <!-- AUDIT LOG TAB -->
+      <div *ngIf="activeTab==='audit'" class="space-y-4">
+        <!-- Filters Card -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h3 class="font-bold text-slate-800 text-sm">تصفية سجل النشاط</h3>
+            <button (click)="resetAuditFilters()" class="text-xs text-primary hover:underline font-medium">مسح الفلاتر</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+            <div>
+              <label class="block text-slate-500 mb-1">العملية</label>
+              <input type="text" [(ngModel)]="filterAction" placeholder="مثال: CREATE" class="w-full px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">نوع الكيان</label>
+              <input type="text" [(ngModel)]="filterEntityType" placeholder="مثال: Product" class="w-full px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">رقم الموظف</label>
+              <input type="number" [(ngModel)]="filterEmployeeId" placeholder="مثال: 1" class="w-full px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">من تاريخ</label>
+              <input type="date" [(ngModel)]="filterDateFrom" class="w-full px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-1">إلى تاريخ</label>
+              <input type="date" [(ngModel)]="filterDateTo" class="w-full px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-primary">
+            </div>
+          </div>
+          <div class="flex justify-end pt-1">
+            <button (click)="loadAuditLogs()" class="px-4 py-1.5 bg-primary text-white rounded-md text-xs font-medium hover:bg-primary-dark transition duration-200">تحديث</button>
+          </div>
+        </div>
+
+        <!-- Table Card -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-right border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-50 text-slate-500 border-b border-slate-200">
+                  <th class="p-3 font-semibold">التاريخ</th>
+                  <th class="p-3 font-semibold">الموظف</th>
+                  <th class="p-3 font-semibold">العملية</th>
+                  <th class="p-3 font-semibold">الكيان</th>
+                  <th class="p-3 font-semibold">اسم/رقم الكيان</th>
+                  <th class="p-3 font-semibold text-left">التفاصيل</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100 text-slate-700">
+                <tr *ngFor="let item of auditLogs" class="hover:bg-slate-50 transition duration-150">
+                  <td class="p-3 whitespace-nowrap">{{ item.createdAt | date:'yyyy-MM-dd HH:mm:ss' }}</td>
+                  <td class="p-3 font-medium">{{ item.employeeName || '—' }} (رقم: {{ item.employeeId || '—' }})</td>
+                  <td class="p-3">
+                    <span class="px-2 py-0.5 rounded-full font-medium"
+                      [class.bg-green-50]="item.action === 'CREATE'" [class.text-green-700]="item.action === 'CREATE'"
+                      [class.bg-blue-50]="item.action === 'UPDATE'" [class.text-blue-700]="item.action === 'UPDATE'"
+                      [class.bg-red-50]="item.action === 'DELETE'" [class.text-red-700]="item.action === 'DELETE'">
+                      {{ translateAction(item.action) }}
+                    </span>
+                  </td>
+                  <td class="p-3">{{ item.entityType }}</td>
+                  <td class="p-3 font-mono text-slate-600">{{ item.entityDisplayName || item.entityId || '—' }}</td>
+                  <td class="p-3 text-left">
+                    <button (click)="openAuditDetail(item.id)" class="px-2.5 py-1 text-primary hover:bg-slate-100 rounded transition duration-200">تفاصيل</button>
+                  </td>
+                </tr>
+                <tr *ngIf="auditLogs.length === 0">
+                  <td colspan="6" class="p-6 text-center text-slate-400">لا توجد سجلات مطابقة للفلاتر المحددة.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Bar -->
+          <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div>
+              <span>عرض الصفحة {{ auditPage }} (إجمالي السجلات: {{ auditTotalCount }})</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button (click)="changeAuditPage(-1)" [disabled]="auditPage <= 1" class="px-2.5 py-1 border border-slate-200 bg-white rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">السابق</button>
+              <button (click)="changeAuditPage(1)" [disabled]="auditPage * auditPageSize >= auditTotalCount" class="px-2.5 py-1 border border-slate-200 bg-white rounded shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">التالي</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </ng-container>
   </div>
 
@@ -242,6 +329,44 @@ function mapErr(e: HttpErrorResponse): string {
         <button (click)="confirmDeleteCategory()" [disabled]="saving" class="px-4 py-2 bg-red-600 text-white rounded-md text-sm disabled:opacity-50">{{saving?'جاري...':'حذف'}}</button>
       </div>
     </div>
+
+    <!-- Audit Detail Modal -->
+    <div *ngIf="activeModal==='auditDetail'" class="bg-white rounded-xl shadow-xl w-full max-w-3xl flex flex-col max-h-[90vh]">
+      <div class="px-5 py-4 border-b border-slate-200 font-bold text-slate-800 flex justify-between items-center">
+        <span>تفاصيل سجل النشاط #{{selectedAuditLog?.id}}</span>
+        <button (click)="closeModal()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1 space-y-4 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-700">
+          <div><span class="text-slate-500 block mb-0.5">العملية</span><span class="font-bold text-slate-800">{{selectedAuditLog ? translateAction(selectedAuditLog.action) : '—'}}</span></div>
+          <div><span class="text-slate-500 block mb-0.5">نوع الكيان</span><span class="font-medium text-slate-800">{{selectedAuditLog?.entityType || '—'}}</span></div>
+          <div><span class="text-slate-500 block mb-0.5">اسم/رقم الكيان</span><span class="font-mono text-slate-850">{{selectedAuditLog?.entityDisplayName || selectedAuditLog?.entityId || '—'}}</span></div>
+          <div><span class="text-slate-500 block mb-0.5">الموظف</span><span class="font-medium text-slate-800">{{selectedAuditLog?.employeeName || '—'}} (رقم: {{selectedAuditLog?.employeeId || '—'}})</span></div>
+          <div><span class="text-slate-500 block mb-0.5">رقم الجلسة</span><span class="font-mono text-slate-800">{{selectedAuditLog?.sessionId || '—'}}</span></div>
+          <div><span class="text-slate-500 block mb-0.5">التاريخ والوقت</span><span class="text-slate-800">{{selectedAuditLog?.createdAt | date:'yyyy-MM-dd HH:mm:ss'}}</span></div>
+          <div><span class="text-slate-500 block mb-0.5">عنوان IP</span><span class="font-mono text-slate-800">{{selectedAuditLog?.ipAddress || '—'}}</span></div>
+          <div class="md:col-span-2"><span class="text-slate-500 block mb-0.5">متصفح المستخدم (User Agent)</span><span class="font-mono text-slate-600">{{selectedAuditLog?.userAgent || '—'}}</span></div>
+        </div>
+
+        <div class="space-y-3">
+          <div *ngIf="selectedAuditLog?.hasBefore">
+            <h4 class="font-bold text-slate-700 mb-1">البيانات قبل التعديل:</h4>
+            <pre class="bg-slate-950 text-emerald-400 p-3 rounded-md overflow-x-auto font-mono text-left" style="direction: ltr; unicode-bidi: embed;">{{ prettyJson(selectedAuditLog?.beforeJson) }}</pre>
+          </div>
+          <div *ngIf="selectedAuditLog?.hasAfter">
+            <h4 class="font-bold text-slate-700 mb-1">البيانات بعد التعديل:</h4>
+            <pre class="bg-slate-950 text-emerald-400 p-3 rounded-md overflow-x-auto font-mono text-left" style="direction: ltr; unicode-bidi: embed;">{{ prettyJson(selectedAuditLog?.afterJson) }}</pre>
+          </div>
+          <div *ngIf="selectedAuditLog?.hasMetadata">
+            <h4 class="font-bold text-slate-700 mb-1">بيانات إضافية:</h4>
+            <pre class="bg-slate-950 text-emerald-400 p-3 rounded-md overflow-x-auto font-mono text-left" style="direction: ltr; unicode-bidi: embed;">{{ prettyJson(selectedAuditLog?.metadataJson) }}</pre>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button (click)="closeModal()" class="px-4 py-2 bg-primary text-white rounded-md text-sm">إغلاق</button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast -->
@@ -257,7 +382,8 @@ export class SettingsComponent implements OnInit {
     { id: 'employees' as TabType, label: 'الموظفون' },
     { id: 'categories' as TabType, label: 'التصنيفات' },
     { id: 'store' as TabType, label: 'المتجر' },
-    { id: 'backup' as TabType, label: 'النسخ الاحتياطي' }
+    { id: 'backup' as TabType, label: 'النسخ الاحتياطي' },
+    { id: 'audit' as TabType, label: 'سجل النشاط' }
   ];
   allScreens = ALL_SCREENS;
   activeTab: TabType = 'employees';
@@ -286,6 +412,22 @@ export class SettingsComponent implements OnInit {
   actionCat: CategoryItem | null = null;
   catForm: any = {};
 
+  // Audit logs state
+  auditLogs: AuditLogListItem[] = [];
+  selectedAuditLog: AuditLogDetailResponse | null = null;
+
+  // Audit log filter fields
+  filterEmployeeId: number | null = null;
+  filterAction: string = '';
+  filterEntityType: string = '';
+  filterDateFrom: string = '';
+  filterDateTo: string = '';
+
+  // Audit log pagination
+  auditPage: number = 1;
+  auditPageSize: number = 50;
+  auditTotalCount: number = 0;
+
   constructor(private api: SettingsApiService) {}
 
   ngOnInit() { this.loadTab(); }
@@ -300,6 +442,8 @@ export class SettingsComponent implements OnInit {
       this.api.getCategories().subscribe({ next: r => { this.categories = r.items || []; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
     } else if (this.activeTab === 'store') {
       this.api.getPublicSettings().subscribe({ next: r => { this.storeSettings = r; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
+    } else if (this.activeTab === 'audit') {
+      this.loadAuditLogs();
     } else {
       this.loading = false;
     }
@@ -410,6 +554,92 @@ export class SettingsComponent implements OnInit {
     if (!bytes) return '0 B';
     const mb = bytes / (1024 * 1024);
     return mb >= 1 ? `${mb.toFixed(2)} MB` : `${(bytes / 1024).toFixed(2)} KB`;
+  }
+
+  loadAuditLogs() {
+    this.loading = true;
+    const params: any = {
+      page: this.auditPage,
+      pageSize: this.auditPageSize
+    };
+    if (this.filterEmployeeId) params.employeeId = this.filterEmployeeId;
+    if (this.filterAction) params.action = this.filterAction;
+    if (this.filterEntityType) params.entityType = this.filterEntityType;
+    
+    if (this.filterDateFrom) {
+      params.dateFrom = new Date(this.filterDateFrom).toISOString();
+    }
+    if (this.filterDateTo) {
+      params.dateTo = new Date(this.filterDateTo).toISOString();
+    }
+
+    this.api.getAuditLogs(params).subscribe({
+      next: r => {
+        this.auditLogs = r.items || [];
+        this.auditTotalCount = r.totalCount || 0;
+        this.loading = false;
+      },
+      error: e => {
+        this.showToast(mapErr(e));
+        this.loading = false;
+      }
+    });
+  }
+
+  resetAuditFilters() {
+    this.filterEmployeeId = null;
+    this.filterAction = '';
+    this.filterEntityType = '';
+    this.filterDateFrom = '';
+    this.filterDateTo = '';
+    this.auditPage = 1;
+    this.loadAuditLogs();
+  }
+
+  openAuditDetail(id: number) {
+    this.loading = true;
+    this.api.getAuditLog(id).subscribe({
+      next: d => {
+        this.selectedAuditLog = d;
+        this.activeModal = 'auditDetail';
+        this.loading = false;
+      },
+      error: err => {
+        this.showToast(mapErr(err));
+        this.loading = false;
+      }
+    });
+  }
+
+  translateAction(action: string): string {
+    const map: Record<string, string> = {
+      'CREATE_BACKUP': 'إنشاء نسخة احتياطية',
+      'RESET_PASSWORD': 'إعادة تعيين كلمة المرور',
+      'COMPLETE_PURCHASE': 'إتمام فاتورة شراء',
+      'COMPLETE_INVOICE': 'إتمام فاتورة بيع',
+      'CREATE': 'إضافة / إنشاء',
+      'UPDATE': 'تعديل / تحديث',
+      'DELETE': 'حذف',
+      'DEACTIVATE': 'تعطيل'
+    };
+    return map[action] || action;
+  }
+
+  prettyJson(jsonStr?: string): string {
+    if (!jsonStr) return '—';
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return jsonStr;
+    }
+  }
+
+  changeAuditPage(direction: number) {
+    const next = this.auditPage + direction;
+    if (next < 1 || (direction > 0 && (next - 1) * this.auditPageSize >= this.auditTotalCount)) return;
+    this.auditPage = next;
+    this.loadAuditLogs();
   }
 
   closeModal() { this.activeModal = null; this.formErr = ''; this.saving = false; }

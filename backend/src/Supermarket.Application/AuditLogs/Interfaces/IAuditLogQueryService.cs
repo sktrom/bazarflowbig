@@ -1,15 +1,12 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using Supermarket.Domain.Entities;
+using Supermarket.Contracts.AuditLogs;
 
 namespace Supermarket.Application.AuditLogs.Interfaces
 {
-    public interface IAuditLogRepository
+    public interface IAuditLogQueryService
     {
-        Task CreateAsync(AuditLog auditLog);
-
-        Task<(List<AuditLog> Items, int TotalCount)> GetPagedAsync(
+        Task<AuditLogListResponse> GetPagedAsync(
             long? employeeId,
             string? action,
             string? entityType,
@@ -18,7 +15,6 @@ namespace Supermarket.Application.AuditLogs.Interfaces
             int page,
             int pageSize);
 
-        Task<AuditLog?> GetByIdAsync(long id);
+        Task<AuditLogDetailResponse?> GetByIdAsync(long id);
     }
 }
-

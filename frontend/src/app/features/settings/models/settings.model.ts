@@ -104,3 +104,35 @@ export interface CreateBackupResponse {
   message: string;
   backupDirectory: string;
 }
+
+// --- Audit Logs ---
+export interface AuditLogListItem {
+  id: number;
+  employeeId?: number;
+  employeeName?: string;
+  sessionId?: number;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  entityDisplayName?: string;
+  createdAt: string;
+  hasBefore: boolean;
+  hasAfter: boolean;
+  hasMetadata: boolean;
+}
+
+export interface AuditLogListResponse {
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  items: AuditLogListItem[];
+}
+
+export interface AuditLogDetailResponse extends AuditLogListItem {
+  beforeJson?: string;
+  afterJson?: string;
+  metadataJson?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
