@@ -11,7 +11,7 @@ describe('OffersComponent', () => {
   let apiSpy: jasmine.SpyObj<OffersApiService>;
 
   beforeEach(async () => {
-    const spy = jasmine.createSpyObj('OffersApiService', ['getAll', 'create', 'update', 'cancel', 'delete', 'exportOffers']);
+    const spy = jasmine.createSpyObj('OffersApiService', ['getAll', 'create', 'update', 'cancel', 'delete', 'exportOffers', 'productsLookup']);
 
     await TestBed.configureTestingModule({
       imports: [OffersComponent, FormsModule],
@@ -25,6 +25,7 @@ describe('OffersComponent', () => {
 
   beforeEach(() => {
     apiSpy.getAll.and.returnValue(of({ items: [] }));
+    apiSpy.productsLookup.and.returnValue(of({ items: [] }));
     fixture = TestBed.createComponent(OffersComponent);
     component = fixture.componentInstance;
   });
@@ -66,7 +67,7 @@ describe('OffersComponent', () => {
 
     component.saveOffer();
 
-    expect(component.formError).toBe('المنتج غير موجود، تأكد من رقم المنتج');
+    expect(component.formError).toBe('المنتج غير موجود، تأكد من اختيار المنتج الصحيح');
     expect(component.activeModal).toBe('form'); // should not close
   });
 
@@ -98,5 +99,34 @@ describe('OffersComponent', () => {
 
     expect(apiSpy.exportOffers).toHaveBeenCalledWith(jasmine.objectContaining({ format: 'excel', isActive: true }));
     expect(window.URL.createObjectURL).toHaveBeenCalled();
+  });
+
+  it('should search products and allow selecting a product in create mode', () => {
+    fixture.detectChanges();
+    component.openCreateModal();
+    
+    expect(apiSpy.productsLookup).toHaveBeenCalledWith('');
+    
+    const mockProducts = [
+      { productId: 10, name: 'شوكولاتة', barcode: '12345', priceUsd: 2.5 }
+    ];
+    apiSpy.productsLookup.and.returnValue(of({ items: mockProducts }));
+    
+    component.onProductSearch('شوكو');
+    component.ngOnInit(); // trigger search subscription or wait
+    
+    // Simulate direct call since rxjs debounce is async
+    component['runProductSearch']('شوكو');
+    expect(component.productLookupResults.length).toBe(1);
+    expect(component.productLookupResults[0].name).toBe('شوكولاتة');
+    
+    component.selectProduct(mockProducts[0]);
+    expect(component.selectedProduct).toEqual(mockProducts[0]);
+    expect(component.formData.productId).toBe(10);
+    expect(component.productLookupResults.length).toBe(0);
+    
+    component.clearSelectedProduct();
+    expect(component.selectedProduct).toBeNull();
+    expect(component.formData.productId).toBeNull();
   });
 });

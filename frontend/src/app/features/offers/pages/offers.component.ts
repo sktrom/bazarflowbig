@@ -2,8 +2,9 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OffersApiService } from '../services/offers-api.service';
-import { OfferListItem, CreateOfferRequest, UpdateOfferRequest } from '../models/offer.model';
+import { OfferListItem, OfferProductLookupItem } from '../models/offer.model';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
 
 @Component({
   selector: 'app-offers',
@@ -150,10 +151,36 @@ import { HttpErrorResponse } from '@angular/common/http';
               {{ formError }}
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1">رقم المنتج (ProductId) <span class="text-red-500">*</span></label>
-              <input type="number" [(ngModel)]="formData.productId" [disabled]="!!editId" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all disabled:bg-slate-100 disabled:text-slate-500">
-              <p class="text-xs text-slate-500 mt-1" *ngIf="!editId">أدخل رقم المنتج من عمود رقم المنتج في شاشة المنتجات أو المخزون</p>
+            <!-- Product lookup (create mode) -->
+            <div *ngIf="!editId">
+              <label class="block text-sm font-medium text-slate-700 mb-1">المنتج <span class="text-red-500">*</span></label>
+              <div *ngIf="selectedProduct" class="flex items-center justify-between bg-green-50 border border-green-200 rounded-md px-3 py-2 mb-2">
+                <div>
+                  <span class="font-medium text-green-800">{{ selectedProduct.name }}</span>
+                  <span class="text-xs text-green-600 mr-2">{{ selectedProduct.barcode }}</span>
+                </div>
+                <button type="button" (click)="clearSelectedProduct()" class="text-green-600 hover:text-red-500 transition-colors text-lg leading-none">&times;</button>
+              </div>
+              <div *ngIf="!selectedProduct" class="relative">
+                <input type="text" [(ngModel)]="productSearchTerm" (ngModelChange)="onProductSearch($event)"
+                  placeholder="ابحث باسم المنتج أو الباركود"
+                  class="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all">
+                <div *ngIf="productLookupResults.length > 0" class="absolute z-10 w-full bg-white border border-slate-200 rounded-md shadow-lg mt-1 max-h-52 overflow-y-auto">
+                  <button *ngFor="let p of productLookupResults" type="button"
+                    (click)="selectProduct(p)"
+                    class="w-full text-right px-3 py-2 hover:bg-slate-50 transition-colors flex items-center justify-between border-b border-slate-100 last:border-0">
+                    <span class="font-medium text-slate-800">{{ p.name }}</span>
+                    <span class="text-xs text-slate-500">{{ p.barcode }} &mdash; {{ p.priceUsd | currency:'USD' }}</span>
+                  </button>
+                </div>
+                <p *ngIf="productSearchLoading" class="text-xs text-slate-400 mt-1">جاري البحث...</p>
+                <p *ngIf="!formData.productId" class="text-xs text-red-500 mt-1">اختر المنتج أولاً</p>
+              </div>
+            </div>
+            <!-- Product display (edit mode) -->
+            <div *ngIf="editId">
+              <label class="block text-sm font-medium text-slate-700 mb-1">المنتج</label>
+              <div class="px-3 py-2 bg-slate-100 rounded-md text-slate-600 text-sm">{{ formData.productName || 'المنتج #' + formData.productId }}</div>
             </div>
 
             <div>
@@ -233,10 +260,20 @@ export class OffersComponent implements OnInit {
 
   actionCandidate: OfferListItem | null = null;
 
+  // Product lookup state
+  productSearchTerm = '';
+  productLookupResults: OfferProductLookupItem[] = [];
+  productSearchLoading = false;
+  selectedProduct: OfferProductLookupItem | null = null;
+  private productSearch$ = new Subject<string>();
+
   constructor(private api: OffersApiService) {}
 
   ngOnInit() {
     this.loadOffers();
+    this.productSearch$.pipe(debounceTime(300), distinctUntilChanged()).subscribe(term => {
+      this.runProductSearch(term);
+    });
   }
 
   loadOffers() {
@@ -275,17 +312,26 @@ export class OffersComponent implements OnInit {
     this.editId = null;
     this.formData = { productId: null, discountType: 'Amount', discountValue: null };
     this.formError = '';
+    this.selectedProduct = null;
+    this.productSearchTerm = '';
+    this.productLookupResults = [];
     this.activeModal = 'form';
+    // Pre-load top 20
+    this.runProductSearch('');
   }
 
   openEditModal(item: OfferListItem) {
     this.editId = item.id;
     this.formData = { 
-      productId: item.productId, 
+      productId: item.productId,
+      productName: item.productName,
       discountType: item.discountType, 
       discountValue: item.discountValue 
     };
     this.formError = '';
+    this.selectedProduct = null;
+    this.productSearchTerm = '';
+    this.productLookupResults = [];
     this.activeModal = 'form';
   }
 
@@ -332,10 +378,40 @@ export class OffersComponent implements OnInit {
     }
   }
 
+  onProductSearch(term: string) {
+    this.productSearch$.next(term);
+  }
+
+  private runProductSearch(term: string) {
+    this.productSearchLoading = true;
+    this.api.productsLookup(term).subscribe({
+      next: (res) => {
+        this.productLookupResults = res.items || [];
+        this.productSearchLoading = false;
+      },
+      error: () => { this.productSearchLoading = false; }
+    });
+  }
+
+  selectProduct(p: OfferProductLookupItem) {
+    this.selectedProduct = p;
+    this.formData.productId = p.productId;
+    this.productLookupResults = [];
+    this.productSearchTerm = '';
+  }
+
+  clearSelectedProduct() {
+    this.selectedProduct = null;
+    this.formData.productId = null;
+    this.productSearchTerm = '';
+    this.productLookupResults = [];
+    this.runProductSearch('');
+  }
+
   private handleFormError(err: HttpErrorResponse) {
     const errorMsg = err.error?.error || '';
     if (errorMsg === 'PRODUCT_NOT_FOUND') {
-      this.formError = 'المنتج غير موجود، تأكد من رقم المنتج';
+      this.formError = 'المنتج غير موجود، تأكد من اختيار المنتج الصحيح';
     } else if (errorMsg === 'INVALID_DISCOUNT_TYPE') {
       this.formError = 'نوع الخصم غير صحيح';
     } else if (errorMsg === 'OFFER_NOT_FOUND') {
@@ -453,5 +529,8 @@ export class OffersComponent implements OnInit {
     this.activeModal = null;
     this.formError = '';
     this.actionCandidate = null;
+    this.selectedProduct = null;
+    this.productSearchTerm = '';
+    this.productLookupResults = [];
   }
 }

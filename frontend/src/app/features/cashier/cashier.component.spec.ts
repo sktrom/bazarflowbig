@@ -5,12 +5,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { CashierComponent } from './cashier.component';
 import { CashierStateService } from './services/cashier-state.service';
 import { CashierApiService, CartResponse, ProductDto } from './services/cashier-api.service';
+import { InvoicesApiService, InvoiceDetailsResponse } from '../invoices/services/invoices-api.service';
 import { By } from '@angular/platform-browser';
 
 describe('CashierComponent & CashierState', () => {
   let fixture: ComponentFixture<CashierComponent>;
   let component: CashierComponent;
   let apiSpy: jasmine.SpyObj<CashierApiService>;
+  let invoicesApiSpy: jasmine.SpyObj<InvoicesApiService>;
   let stateService: CashierStateService;
 
   const mockProducts: ProductDto[] = [
@@ -28,11 +30,32 @@ describe('CashierComponent & CashierState', () => {
     ]
   };
 
+  const receiptDetails: InvoiceDetailsResponse = {
+    invoiceId: 77,
+    invoiceNumber: 'INV-77',
+    status: 'Completed',
+    customerName: 'Ahmad',
+    originalEmployeeId: 1,
+    employeeName: 'Cashier One',
+    subtotalUsd: 10,
+    totalUsd: 10,
+    exchangeRateSypSnapshot: 10000,
+    totalSyp: 100000,
+    hasManualPriceEdit: false,
+    hasAdjustmentRequest: false,
+    createdAt: '2026-05-18T10:00:00Z',
+    completedAt: '2026-05-18T10:01:00Z',
+    lines: [
+      { lineId: 101, productId: 1, productName: 'Prod A', quantity: 1, unitPriceUsdOriginal: 10, lineTotalUsdOriginal: 10, lineTotalUsdEffective: 10, isPriceOverridden: false, sortOrder: 1 }
+    ]
+  };
+
   beforeEach(async () => {
     apiSpy = jasmine.createSpyObj('CashierApiService', [
       'getCashierProducts', 'getCurrentCart', 'addByProduct', 'updateLine', 'deleteLine',
       'suspendCart', 'completeCart', 'cancelCart'
     ]);
+    invoicesApiSpy = jasmine.createSpyObj('InvoicesApiService', ['getInvoiceDetails']);
 
     apiSpy.getCashierProducts.and.returnValue(of(mockProducts));
     apiSpy.getCurrentCart.and.returnValue(of(activeCart));
@@ -41,6 +64,7 @@ describe('CashierComponent & CashierState', () => {
       imports: [CashierComponent, HttpClientTestingModule],
       providers: [
         { provide: CashierApiService, useValue: apiSpy },
+        { provide: InvoicesApiService, useValue: invoicesApiSpy },
         CashierStateService
       ]
     }).compileComponents();
@@ -132,6 +156,37 @@ describe('CashierComponent & CashierState', () => {
     component.confirmComplete();
     expect(apiSpy.completeCart).toHaveBeenCalled();
     expect(component.state.cart?.lines.length).toBe(0); // empty/new cart
+    expect(component.activeModal).toBeNull();
+    expect(invoicesApiSpy.getInvoiceDetails).not.toHaveBeenCalled();
+  });
+
+  it('completion with invoiceId fetches receipt details and opens print preview', () => {
+    const completedCart: CartResponse = { ...emptyCart, invoiceId: 77, status: 'Completed' };
+    apiSpy.completeCart.and.returnValue(of(completedCart));
+    invoicesApiSpy.getInvoiceDetails.and.returnValue(of(receiptDetails));
+
+    component.openCompleteModal();
+    component.confirmComplete();
+
+    expect(invoicesApiSpy.getInvoiceDetails).toHaveBeenCalledWith(77);
+    expect(component.activeModal).toBe('receipt');
+    expect(component.completedInvoice?.invoiceId).toBe(77);
+    expect(component.isReceiptLoading).toBeFalse();
+  });
+
+  it('receipt details fetch failure keeps completed sale state and shows non-blocking error', () => {
+    const completedCart: CartResponse = { ...emptyCart, invoiceId: 77, status: 'Completed' };
+    const err403 = new HttpErrorResponse({ status: 403, error: { error: 'UNAUTHORIZED_SCREEN_ACCESS' } });
+    apiSpy.completeCart.and.returnValue(of(completedCart));
+    invoicesApiSpy.getInvoiceDetails.and.returnValue(throwError(() => err403));
+
+    component.openCompleteModal();
+    component.confirmComplete();
+
+    expect(component.state.cart?.lines.length).toBe(0);
+    expect(component.activeModal).toBe('receipt');
+    expect(component.completedInvoice).toBeNull();
+    expect(component.receiptError).toContain('صلاحية');
   });
 
   it('cancel confirmation works', () => {

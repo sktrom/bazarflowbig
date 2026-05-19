@@ -20,5 +20,8 @@ namespace Supermarket.Application.Offers.Interfaces
         Task<Offer?> GetActiveOfferForProductAsync(long productId);
         
         Task<DateTime?> GetAdoptionMarkerUtcAsync();
+
+        // Products lookup scoped to Offers permission
+        Task<List<Product>> ProductsLookupAsync(string? search, int limit);
     }
 }

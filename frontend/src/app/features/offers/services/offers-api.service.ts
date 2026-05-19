@@ -8,7 +8,8 @@ import {
   CreateOfferRequest,
   UpdateOfferRequest,
   CancelOfferResponse,
-  DeleteOfferResponse
+  DeleteOfferResponse,
+  OfferProductLookupResponse
 } from '../models/offer.model';
 
 @Injectable({ providedIn: 'root' })
@@ -42,5 +43,11 @@ export class OffersApiService {
       responseType: 'blob',
       observe: 'response'
     });
+  }
+
+  productsLookup(search?: string): Observable<OfferProductLookupResponse> {
+    const params: Record<string, string> = {};
+    if (search?.trim()) params['search'] = search.trim();
+    return this.http.get<OfferProductLookupResponse>(`${this.baseUrl}/products-lookup`, { params });
   }
 }

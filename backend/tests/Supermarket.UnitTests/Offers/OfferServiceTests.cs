@@ -130,5 +130,56 @@ namespace Supermarket.UnitTests.Offers
             Assert.True(result.Success);
             _repoMock.Verify(r => r.DeleteAsync(1), Times.Once);
         }
+
+        // --- ProductsLookup tests ---
+
+        [Fact]
+        public async Task ProductsLookupAsync_ShouldReturnOnlyActiveProducts()
+        {
+            var activeProducts = new List<Product>
+            {
+                new Product { Id = 1, Name = "كولا", Barcode = "111", IsActive = true, PriceUsd = 1.5m },
+                new Product { Id = 2, Name = "ماء",  Barcode = "222", IsActive = true, PriceUsd = 0.5m }
+            };
+
+            _repoMock
+                .Setup(r => r.ProductsLookupAsync(null, 20))
+                .ReturnsAsync(activeProducts);
+
+            var result = await _service.ProductsLookupAsync(null);
+
+            Assert.Equal(2, result.Items.Count);
+            Assert.All(result.Items, i => Assert.True(i.ProductId > 0));
+            _repoMock.Verify(r => r.ProductsLookupAsync(null, 20), Times.Once);
+        }
+
+        [Fact]
+        public async Task ProductsLookupAsync_ShouldSearchByBarcode()
+        {
+            var matchedProduct = new Product { Id = 3, Name = "عصير", Barcode = "555", IsActive = true, PriceUsd = 2m };
+
+            _repoMock
+                .Setup(r => r.ProductsLookupAsync("555", 20))
+                .ReturnsAsync(new List<Product> { matchedProduct });
+
+            var result = await _service.ProductsLookupAsync("555");
+
+            Assert.Single(result.Items);
+            Assert.Equal("555", result.Items[0].Barcode);
+        }
+
+        [Fact]
+        public async Task ProductsLookupAsync_ShouldNotExceedLimit20()
+        {
+            // Repository is responsible for enforcing the limit;
+            // service always passes 20 — verify that contract.
+            _repoMock
+                .Setup(r => r.ProductsLookupAsync(It.IsAny<string?>(), 20))
+                .ReturnsAsync(new List<Product>());
+
+            await _service.ProductsLookupAsync("anything");
+
+            _repoMock.Verify(r => r.ProductsLookupAsync(It.IsAny<string?>(), 20), Times.Once);
+        }
     }
 }

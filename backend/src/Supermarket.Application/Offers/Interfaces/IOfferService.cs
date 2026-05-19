@@ -10,5 +10,6 @@ namespace Supermarket.Application.Offers.Interfaces
         Task<OfferDetailResponse> UpdateAsync(long id, UpdateOfferRequest request);
         Task<CancelOfferResponse> CancelAsync(long id);
         Task<DeleteOfferResponse> DeleteAsync(long id);
+        Task<OfferProductLookupResponse> ProductsLookupAsync(string? search);
     }
 }

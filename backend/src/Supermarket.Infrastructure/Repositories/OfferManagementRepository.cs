@@ -92,5 +92,25 @@ namespace Supermarket.Infrastructure.Repositories
 
             return null;
         }
+
+        public async Task<List<Product>> ProductsLookupAsync(string? search, int limit)
+        {
+            var query = _context.Products
+                .Where(p => p.IsActive)
+                .AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.ToLower().Trim();
+                query = query.Where(p =>
+                    p.Name.ToLower().Contains(s) ||
+                    p.Barcode.Contains(s));
+            }
+
+            return await query
+                .OrderBy(p => p.Name)
+                .Take(limit)
+                .ToListAsync();
+        }
     }
 }

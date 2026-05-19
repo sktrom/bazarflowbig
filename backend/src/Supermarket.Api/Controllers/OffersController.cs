@@ -91,5 +91,12 @@ namespace Supermarket.Api.Controllers
                 return BadRequest(new { error = ex.Message });
             }
         }
+
+        [HttpGet("products-lookup")]
+        public async Task<IActionResult> ProductsLookup([FromQuery] string? search)
+        {
+            var response = await _offerService.ProductsLookupAsync(search);
+            return Ok(response);
+        }
     }
 }

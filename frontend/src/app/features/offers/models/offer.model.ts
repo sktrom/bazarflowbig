@@ -43,3 +43,14 @@ export interface DeleteOfferResponse {
   success: boolean;
   message: string;
 }
+
+export interface OfferProductLookupItem {
+  productId: number;
+  name: string;
+  barcode: string;
+  priceUsd: number;
+}
+
+export interface OfferProductLookupResponse {
+  items: OfferProductLookupItem[];
+}

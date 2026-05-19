@@ -151,5 +151,21 @@ namespace Supermarket.Application.Offers.Services
                 UpdatedAt = o.UpdatedAt
             };
         }
+
+        public async Task<OfferProductLookupResponse> ProductsLookupAsync(string? search)
+        {
+            const int limit = 20;
+            var products = await _repository.ProductsLookupAsync(search, limit);
+            return new OfferProductLookupResponse
+            {
+                Items = products.Select(p => new OfferProductLookupItem
+                {
+                    ProductId = p.Id,
+                    Name = p.Name,
+                    Barcode = p.Barcode,
+                    PriceUsd = p.PriceUsd
+                }).ToList()
+            };
+        }
     }
 }
