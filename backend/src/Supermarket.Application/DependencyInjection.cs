@@ -32,6 +32,8 @@ using Supermarket.Application.Reports.Services;
 using Supermarket.Application.Common.Exports;
 using Supermarket.Application.Exports.Interfaces;
 using Supermarket.Application.Exports.Services;
+using Supermarket.Application.Suppliers.Interfaces;
+using Supermarket.Application.Suppliers.Services;
 
 namespace Supermarket.Application
 {
@@ -56,6 +58,7 @@ namespace Supermarket.Application
             services.AddScoped<IInventoryQueryService, InventoryQueryService>();
             services.AddScoped<IActionCenterService, ActionCenterService>();
             services.AddScoped<IReportsService, ReportsService>();
+            services.AddScoped<ISupplierService, SupplierService>();
             
             services.AddScoped<IExportFormatBuilder, ExportFormatBuilder>();
             services.AddScoped<IPrintHtmlBuilder, PrintHtmlBuilder>();

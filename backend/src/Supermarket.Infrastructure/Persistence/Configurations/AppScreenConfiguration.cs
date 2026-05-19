@@ -29,7 +29,8 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
                 new AppScreen { Id = 4, ScreenKey = "Offers", ScreenName = "Offers" },
                 new AppScreen { Id = 5, ScreenKey = "Reports", ScreenName = "Reports" },
                 new AppScreen { Id = 6, ScreenKey = "Inventory", ScreenName = "Inventory" },
-                new AppScreen { Id = 7, ScreenKey = "Settings", ScreenName = "Settings" }
+                new AppScreen { Id = 7, ScreenKey = "Settings", ScreenName = "Settings" },
+                new AppScreen { Id = 8, ScreenKey = "Purchases", ScreenName = "Purchases" }
             );
         }
     }

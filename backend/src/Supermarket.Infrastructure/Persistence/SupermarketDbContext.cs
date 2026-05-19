@@ -21,6 +21,7 @@ namespace Supermarket.Infrastructure.Persistence
         public DbSet<Product> Products => Set<Product>();
         public DbSet<ProductBatch> ProductBatches => Set<ProductBatch>();
         public DbSet<Offer> Offers => Set<Offer>();
+        public DbSet<Supplier> Suppliers => Set<Supplier>();
         
         public DbSet<Invoice> Invoices => Set<Invoice>();
         public DbSet<InvoiceLine> InvoiceLines => Set<InvoiceLine>();
