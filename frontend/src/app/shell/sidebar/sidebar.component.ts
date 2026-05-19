@@ -42,6 +42,7 @@ export class SidebarComponent implements OnInit {
     { label: 'نقطة البيع', route: '/cashier', screenKey: 'Sales' },
     { label: 'الفواتير', route: '/invoices', screenKey: 'Invoices' },
     { label: 'المخزون', route: '/inventory', screenKey: 'Inventory' },
+    { label: 'الموردون', route: '/suppliers', screenKey: 'Purchases' },
     { label: 'مركز القرارات', route: '/inventory/action-center', screenKey: 'Inventory' },
     { label: 'المنتجات', route: '/products', screenKey: 'Products' },
     { label: 'العروض', route: '/offers', screenKey: 'Offers' },
