@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Moq;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.CartFinalization.Interfaces;
 using Supermarket.Application.CartFinalization.Services;
 using Supermarket.Application.Common.Interfaces;
@@ -20,6 +21,7 @@ namespace Supermarket.UnitTests.CartFinalization
         private readonly Mock<IAppSettingsRepository> _settingsRepoMock = new();
         private readonly Mock<ICartManagementRepository> _cartRepoMock = new();
         private readonly Mock<ISessionContext> _sessionContextMock = new();
+        private readonly Mock<IAuditLogService> _auditLogMock = new();
 
         private CartFinalizationService CreateService() =>
             new CartFinalizationService(
@@ -27,7 +29,8 @@ namespace Supermarket.UnitTests.CartFinalization
                 _inventoryRepoMock.Object,
                 _settingsRepoMock.Object,
                 _cartRepoMock.Object,
-                _sessionContextMock.Object);
+                _sessionContextMock.Object,
+                _auditLogMock.Object);
 
         // ─── Suspend Tests ─────────────────────────────────────────────────────────
 
@@ -128,6 +131,14 @@ namespace Supermarket.UnitTests.CartFinalization
             Assert.Equal(1_500_000m, invoice.TotalSyp);
             Assert.Equal(InvoiceStatus.Completed, invoice.Status);
             Assert.NotNull(invoice.CompletedAt);
+            _auditLogMock.Verify(a => a.RecordAsync(
+                "COMPLETE_INVOICE",
+                "Invoice",
+                "10",
+                invoice.InvoiceNumber,
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
         }
 
         [Fact]

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Application.Employees.Interfaces;
 using Supermarket.Contracts.Employees;
@@ -14,15 +15,18 @@ namespace Supermarket.Application.Employees.Services
         private readonly IEmployeeManagementRepository _employeeRepo;
         private readonly IPermissionManagementRepository _permissionRepo;
         private readonly IPasswordHasher _passwordHasher;
+        private readonly IAuditLogService _auditLogService;
 
         public EmployeeService(
             IEmployeeManagementRepository employeeRepo,
             IPermissionManagementRepository permissionRepo,
-            IPasswordHasher passwordHasher)
+            IPasswordHasher passwordHasher,
+            IAuditLogService auditLogService)
         {
             _employeeRepo = employeeRepo;
             _permissionRepo = permissionRepo;
             _passwordHasher = passwordHasher;
+            _auditLogService = auditLogService;
         }
 
         public async Task<EmployeeListResponse> GetAllAsync()
@@ -155,6 +159,13 @@ namespace Supermarket.Application.Employees.Services
             employee.UpdatedAt = DateTime.UtcNow;
 
             await _employeeRepo.UpdateAsync(employee);
+
+            await _auditLogService.RecordAsync(
+                "RESET_PASSWORD",
+                "Employee",
+                employee.Id.ToString(),
+                string.IsNullOrWhiteSpace(employee.Username) ? employee.FullName : employee.Username,
+                metadata: new { targetEmployeeId = employee.Id });
 
             return new ResetPasswordResponse { Success = true, Message = "Password reset successfully." };
         }

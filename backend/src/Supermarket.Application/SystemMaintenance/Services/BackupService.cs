@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.SystemMaintenance.Interfaces;
 using Supermarket.Contracts.SystemMaintenance;
 
@@ -12,16 +13,19 @@ namespace Supermarket.Application.SystemMaintenance.Services
         public const int BackupCommandTimeoutSeconds = 300;
 
         private readonly IBackupRepository _repository;
+        private readonly IAuditLogService _auditLogService;
 
-        public BackupService(IBackupRepository repository)
+        public BackupService(IBackupRepository repository, IAuditLogService auditLogService)
         {
             _repository = repository;
+            _auditLogService = auditLogService;
         }
 
         public async Task<CreateBackupResponse> CreateBackupAsync()
         {
             var createdAt = DateTime.Now;
-            var backupDirectory = ResolveBackupDirectory(_repository.GetConfiguredBackupDirectory());
+            var configuredDirectory = _repository.GetConfiguredBackupDirectory();
+            var backupDirectory = ResolveBackupDirectory(configuredDirectory);
             var fileName = GenerateFileName(createdAt);
             var fullDirectory = Path.GetFullPath(backupDirectory);
             var fullPath = Path.GetFullPath(Path.Combine(fullDirectory, fileName));
@@ -44,7 +48,7 @@ namespace Supermarket.Application.SystemMaintenance.Services
                 await _repository.ExecuteBackupAsync(databaseName, fullPath, BackupCommandTimeoutSeconds);
                 var sizeBytes = _repository.GetFileSize(fullPath);
 
-                return new CreateBackupResponse
+                var response = new CreateBackupResponse
                 {
                     Success = true,
                     FileName = fileName,
@@ -53,6 +57,19 @@ namespace Supermarket.Application.SystemMaintenance.Services
                     BackupDirectory = fullDirectory,
                     Message = "Backup created successfully."
                 };
+
+                await _auditLogService.RecordAsync(
+                    "CREATE_BACKUP",
+                    "SystemBackup",
+                    entityDisplayName: fileName,
+                    metadata: new
+                    {
+                        fileName,
+                        sizeBytes,
+                        backupDirectoryConfigured = configuredDirectory != null
+                    });
+
+                return response;
             }
             catch (InvalidOperationException)
             {

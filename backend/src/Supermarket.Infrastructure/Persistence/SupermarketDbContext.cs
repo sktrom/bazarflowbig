@@ -16,6 +16,7 @@ namespace Supermarket.Infrastructure.Persistence
         public DbSet<PosDevice> PosDevices => Set<PosDevice>();
         public DbSet<CashSession> CashSessions => Set<CashSession>();
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+        public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         
         public DbSet<Category> Categories => Set<Category>();
         public DbSet<Product> Products => Set<Product>();

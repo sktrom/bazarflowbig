@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Application.PurchaseInvoices.Interfaces;
 using Supermarket.Contracts.PurchaseInvoices;
@@ -16,11 +17,16 @@ namespace Supermarket.Application.PurchaseInvoices.Services
         private const int ProductLookupLimit = 20;
         private readonly IPurchaseInvoiceRepository _repository;
         private readonly ISessionContext _sessionContext;
+        private readonly IAuditLogService _auditLogService;
 
-        public PurchaseInvoiceService(IPurchaseInvoiceRepository repository, ISessionContext sessionContext)
+        public PurchaseInvoiceService(
+            IPurchaseInvoiceRepository repository,
+            ISessionContext sessionContext,
+            IAuditLogService auditLogService)
         {
             _repository = repository;
             _sessionContext = sessionContext;
+            _auditLogService = auditLogService;
         }
 
         public async Task<PurchaseInvoiceListResponse> GetAllAsync()
@@ -243,7 +249,20 @@ namespace Supermarket.Application.PurchaseInvoices.Services
                 await _repository.SaveChangesAsync();
             }, IsolationLevel.Serializable);
 
-            return await GetByIdAsync(id);
+            var completed = await GetByIdAsync(id);
+            await _auditLogService.RecordAsync(
+                "COMPLETE_PURCHASE",
+                "PurchaseInvoice",
+                completed.Id.ToString(),
+                completed.InvoiceNumber,
+                metadata: new
+                {
+                    completed.TotalUsd,
+                    completed.SupplierId,
+                    lineCount = completed.Lines.Count
+                });
+
+            return completed;
         }
 
         public async Task<PurchaseProductLookupResponse> LookupProductsAsync(string? search)

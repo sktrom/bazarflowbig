@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Supermarket.Application.Auth.Interfaces;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Sessions.Interfaces;
 using Supermarket.Application.Employees.Interfaces;
 using Supermarket.Application.Categories.Interfaces;
@@ -33,6 +34,7 @@ namespace Supermarket.Infrastructure
                 options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
 
             // Repository implementations (all EF-backed)
+            services.AddScoped<IAuditLogRepository, AuditLogRepository>();
             services.AddScoped<IEmployeeRepository, EmployeeRepository>();
             services.AddScoped<IDeviceRepository, DeviceRepository>();
             services.AddScoped<IAuthSessionRepository, AuthSessionRepository>();

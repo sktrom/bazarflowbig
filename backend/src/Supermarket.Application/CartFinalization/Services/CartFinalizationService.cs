@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.CartFinalization.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Application.WorkingCart.Interfaces;
@@ -19,19 +20,22 @@ namespace Supermarket.Application.CartFinalization.Services
         private readonly IAppSettingsRepository _settingsRepo;
         private readonly ICartManagementRepository _cartRepo;
         private readonly ISessionContext _sessionContext;
+        private readonly IAuditLogService _auditLogService;
 
         public CartFinalizationService(
             ICartFinalizationRepository finalizationRepo,
             IInventoryAllocationRepository inventoryRepo,
             IAppSettingsRepository settingsRepo,
             ICartManagementRepository cartRepo,
-            ISessionContext sessionContext)
+            ISessionContext sessionContext,
+            IAuditLogService auditLogService)
         {
             _finalizationRepo = finalizationRepo;
             _inventoryRepo = inventoryRepo;
             _settingsRepo = settingsRepo;
             _cartRepo = cartRepo;
             _sessionContext = sessionContext;
+            _auditLogService = auditLogService;
         }
 
         public async Task<CartResponse> SuspendAsync(SuspendCartRequest request)
@@ -75,9 +79,10 @@ namespace Supermarket.Application.CartFinalization.Services
 
             // Ensure inventory is reserved before consuming (handles direct Working -> Complete)
             var reservedAllocations = await _inventoryRepo.GetReservedByInvoiceAsync(invoice.Id);
+            var lineCount = reservedAllocations.Select(a => a.InvoiceLineId).Distinct().Count();
             if (!reservedAllocations.Any())
             {
-                await ReserveInventoryAsync(invoice.Id);
+                lineCount = await ReserveInventoryAsync(invoice.Id);
             }
 
             // Consume inventory (FEFO handled in repo)
@@ -87,6 +92,18 @@ namespace Supermarket.Application.CartFinalization.Services
             invoice.CompletedAt = DateTime.UtcNow;
             await _finalizationRepo.UpdateInvoiceAsync(invoice);
             await _finalizationRepo.SaveChangesAsync();
+
+            await _auditLogService.RecordAsync(
+                "COMPLETE_INVOICE",
+                "Invoice",
+                invoice.Id.ToString(),
+                invoice.InvoiceNumber,
+                metadata: new
+                {
+                    invoice.TotalUsd,
+                    invoice.TotalSyp,
+                    lineCount
+                });
 
             return MapToCartResponse(invoice);
         }
@@ -129,7 +146,7 @@ namespace Supermarket.Application.CartFinalization.Services
 
         // ─── Private Inventory Helpers ────────────────────────────────────────────
 
-        private async Task ReserveInventoryAsync(long invoiceId)
+        private async Task<int> ReserveInventoryAsync(long invoiceId)
         {
             var lines = await _cartRepo.GetCartLinesAsync(invoiceId);
             foreach (var line in lines)
@@ -163,6 +180,7 @@ namespace Supermarket.Application.CartFinalization.Services
             }
 
             await _inventoryRepo.SaveChangesAsync();
+            return lines.Count;
         }
 
         private async Task ConsumeInventoryAsync(long invoiceId)

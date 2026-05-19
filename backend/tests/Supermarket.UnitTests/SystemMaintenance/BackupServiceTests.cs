@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Moq;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.SystemMaintenance.Interfaces;
 using Supermarket.Application.SystemMaintenance.Services;
 using Xunit;
@@ -48,7 +50,8 @@ namespace Supermarket.UnitTests.SystemMaintenance
         public async Task CreateBackupAsync_ShouldReturnMetadata_WhenBackupSucceeds()
         {
             var repo = new FakeBackupRepository { ConfiguredDirectory = @"C:\BazarFlowBackups" };
-            var service = new BackupService(repo);
+            var auditMock = new Mock<IAuditLogService>();
+            var service = new BackupService(repo, auditMock.Object);
 
             var result = await service.CreateBackupAsync();
 
@@ -58,6 +61,14 @@ namespace Supermarket.UnitTests.SystemMaintenance
             Assert.Equal(Path.GetFullPath(@"C:\BazarFlowBackups"), result.BackupDirectory);
             Assert.Equal("SupermarketDb", repo.ExecutedDatabaseName);
             Assert.Equal(BackupService.BackupCommandTimeoutSeconds, repo.ExecutedTimeoutSeconds);
+            auditMock.Verify(a => a.RecordAsync(
+                "CREATE_BACKUP",
+                "SystemBackup",
+                null,
+                result.FileName,
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
         }
 
         [Fact]
@@ -68,7 +79,8 @@ namespace Supermarket.UnitTests.SystemMaintenance
                 ConfiguredDirectory = @"C:\BazarFlowBackups",
                 ExecuteException = new Exception("sql failed")
             };
-            var service = new BackupService(repo);
+            var auditMock = new Mock<IAuditLogService>();
+            var service = new BackupService(repo, auditMock.Object);
 
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateBackupAsync());
 

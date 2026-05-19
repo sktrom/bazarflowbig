@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.Auth.Services;
+using Supermarket.Application.AuditLogs.Interfaces;
+using Supermarket.Application.AuditLogs.Services;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Application.Common.Services;
 using Supermarket.Application.Sessions.Interfaces;
@@ -46,6 +48,7 @@ namespace Supermarket.Application
         public static IServiceCollection AddApplicationServices(this IServiceCollection services)
         {
             // Application services only — NO EF / DbContext / Infrastructure types here
+            services.AddScoped<IAuditLogService, AuditLogService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<ISessionService, SessionService>();

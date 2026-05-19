@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Moq;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Application.PurchaseInvoices.Interfaces;
 using Supermarket.Application.PurchaseInvoices.Services;
@@ -17,16 +18,18 @@ namespace Supermarket.UnitTests.PurchaseInvoices
     {
         private readonly Mock<IPurchaseInvoiceRepository> _repoMock;
         private readonly Mock<ISessionContext> _sessionMock;
+        private readonly Mock<IAuditLogService> _auditLogMock;
         private readonly PurchaseInvoiceService _service;
 
         public PurchaseInvoiceServiceTests()
         {
             _repoMock = new Mock<IPurchaseInvoiceRepository>();
             _sessionMock = new Mock<ISessionContext>();
+            _auditLogMock = new Mock<IAuditLogService>();
             _sessionMock.Setup(s => s.EmployeeId).Returns(42);
             _repoMock.Setup(r => r.ExecuteInTransactionAsync(It.IsAny<Func<Task>>(), It.IsAny<System.Data.IsolationLevel>()))
                 .Returns<Func<Task>, System.Data.IsolationLevel>((operation, _) => operation());
-            _service = new PurchaseInvoiceService(_repoMock.Object, _sessionMock.Object);
+            _service = new PurchaseInvoiceService(_repoMock.Object, _sessionMock.Object, _auditLogMock.Object);
         }
 
         [Fact]
@@ -329,6 +332,14 @@ namespace Supermarket.UnitTests.PurchaseInvoices
             Assert.Equal(42, batch.EnteredByEmployeeId);
             Assert.Equal("EXT-1", batch.EntryInvoiceNumber);
             Assert.NotNull(batch.EntryDate);
+            _auditLogMock.Verify(a => a.RecordAsync(
+                "COMPLETE_PURCHASE",
+                "PurchaseInvoice",
+                "10",
+                "PI-20260519-000001",
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
         }
 
         [Fact]
