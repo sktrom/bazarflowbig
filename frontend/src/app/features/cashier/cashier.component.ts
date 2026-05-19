@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -43,6 +43,41 @@ import { ReceiptPrintComponent } from '../../shared/components/receipt-print/rec
               الفاتورة
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Barcode Entry -->
+      <div class="bg-white border-b border-slate-200 p-3 shrink-0 shadow-sm">
+        <div class="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <div class="relative flex-1">
+            <input
+              #barcodeInputRef
+              type="text"
+              name="barcode"
+              [(ngModel)]="barcodeInput"
+              (keyup.enter)="submitBarcode()"
+              placeholder="امسح الباركود أو أدخله يدويًا"
+              class="input-field pr-10"
+              autocomplete="off"
+              inputmode="text"
+              data-testid="barcode-input"
+            >
+            <span class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h2m4 0h1m4 0h1m4 0h2M3 19h2m4 0h1m4 0h1m4 0h2M5 5v14m14-14v14M9 5v14m6-14v14"></path></svg>
+            </span>
+          </div>
+          <button
+            type="button"
+            class="btn-primary shrink-0"
+            [disabled]="barcodeProcessing || !barcodeInput.trim()"
+            (click)="submitBarcode()"
+            data-testid="barcode-add-button"
+          >
+            إضافة
+          </button>
+        </div>
+        <div *ngIf="barcodeSuccessMessage" class="mt-2 text-sm text-green-700" data-testid="barcode-success">
+          {{ barcodeSuccessMessage }}
         </div>
       </div>
 
@@ -213,7 +248,9 @@ import { ReceiptPrintComponent } from '../../shared/components/receipt-print/rec
     @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
   `]
 })
-export class CashierComponent implements OnInit {
+export class CashierComponent implements OnInit, AfterViewInit {
+  @ViewChild('barcodeInputRef') barcodeInputRef?: ElementRef<HTMLInputElement>;
+
   activeTab: 'products' | 'invoice' = 'invoice'; // Mobile default to invoice
   activeModal: 'customer' | 'discount' | 'suspend' | 'cancel' | 'complete' | 'receipt' | null = null;
   modalData: any = {};
@@ -221,6 +258,9 @@ export class CashierComponent implements OnInit {
   isReceiptLoading = false;
   receiptError: string | null = null;
   isPrinting = false;
+  barcodeInput = '';
+  barcodeProcessing = false;
+  barcodeSuccessMessage: string | null = null;
   
   state = this.cashierState['stateObj']; // bind to snapshot, we'll sync via subscribe
 
@@ -232,6 +272,10 @@ export class CashierComponent implements OnInit {
   ngOnInit(): void {
     this.cashierState.state$.subscribe(s => this.state = s);
     this.cashierState.loadInitialState();
+  }
+
+  ngAfterViewInit(): void {
+    this.focusBarcodeInput();
   }
 
   // --- Products Pane ---
@@ -250,6 +294,32 @@ export class CashierComponent implements OnInit {
 
   onDeleteLine(lineId: number) {
     this.cashierState.deleteLine(lineId);
+  }
+
+  submitBarcode() {
+    const barcode = this.barcodeInput.trim();
+    if (!barcode || this.barcodeProcessing) return;
+
+    this.barcodeProcessing = true;
+    this.barcodeInput = '';
+    this.barcodeSuccessMessage = null;
+
+    this.cashierState.addByBarcode(barcode).subscribe({
+      next: () => {
+        this.barcodeProcessing = false;
+        this.barcodeSuccessMessage = 'تمت إضافة المنتج';
+        window.setTimeout(() => this.barcodeSuccessMessage = null, 1500);
+        this.focusBarcodeInput();
+      },
+      error: () => {
+        this.barcodeProcessing = false;
+        this.focusBarcodeInput();
+      }
+    });
+  }
+
+  focusBarcodeInput() {
+    window.setTimeout(() => this.barcodeInputRef?.nativeElement.focus(), 0);
   }
 
   // --- Modals ---

@@ -66,12 +66,16 @@ export class CashierStateService {
     });
   }
 
-  addByBarcode(barcode: string) {
+  addByBarcode(barcode: string): Observable<CartResponse> {
     this.patchState({ isLoading: true, error: null });
-    this.api.addByBarcode(barcode).subscribe({
-      next: (cart) => this.patchState({ cart, isLoading: false }),
-      error: (err) => { this.handleError(err); this.patchState({ isLoading: false }); }
-    });
+    return this.api.addByBarcode(barcode).pipe(
+      tap((cart) => this.patchState({ cart, isLoading: false })),
+      catchError(err => {
+        this.handleError(err);
+        this.patchState({ isLoading: false });
+        throw err;
+      })
+    );
   }
 
   updateLine(lineId: number, quantity?: number, overrideLineTotalUsd?: number | null) {
@@ -192,6 +196,7 @@ export class CashierStateService {
         case 'INSUFFICIENT_INVENTORY': msg = 'الكمية غير متوفرة في المخزون'; break;
         case 'INVALID_QUANTITY': msg = 'الكمية غير صحيحة'; break;
         case 'NO_WORKING_CART_EXISTS': msg = 'لا توجد فاتورة نشطة'; break;
+        case 'PRODUCT_NOT_FOUND': msg = 'لم يتم العثور على منتج بهذا الباركود'; break;
         default: msg = code;
       }
     } else if (err.status === 403) {

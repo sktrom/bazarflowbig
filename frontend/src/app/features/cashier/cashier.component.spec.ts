@@ -1,4 +1,4 @@
-import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { TestBed, ComponentFixture, fakeAsync, tick } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { of, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -53,7 +53,7 @@ describe('CashierComponent & CashierState', () => {
   beforeEach(async () => {
     apiSpy = jasmine.createSpyObj('CashierApiService', [
       'getCashierProducts', 'getCurrentCart', 'addByProduct', 'updateLine', 'deleteLine',
-      'suspendCart', 'completeCart', 'cancelCart'
+      'suspendCart', 'completeCart', 'cancelCart', 'addByBarcode'
     ]);
     invoicesApiSpy = jasmine.createSpyObj('InvoicesApiService', ['getInvoiceDetails']);
 
@@ -81,8 +81,83 @@ describe('CashierComponent & CashierState', () => {
     expect(component.state.products).toEqual(mockProducts);
   });
 
+  it('should focus barcode input on init', async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const input = fixture.debugElement.query(By.css('[data-testid="barcode-input"]')).nativeElement as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('should add product immediately on Enter', () => {
+    apiSpy.addByBarcode.and.returnValue(of(activeCart));
+    component.barcodeInput = ' 111 ';
+    fixture.detectChanges();
+
+    const input = fixture.debugElement.query(By.css('[data-testid="barcode-input"]'));
+    input.triggerEventHandler('keyup.enter', new KeyboardEvent('keyup', { key: 'Enter' }));
+
+    expect(apiSpy.addByBarcode).toHaveBeenCalledWith('111');
+  });
+
+  it('should not require clicking Add after scan', () => {
+    apiSpy.addByBarcode.and.returnValue(of(activeCart));
+    component.barcodeInput = '111';
+    fixture.detectChanges();
+    const addButton = fixture.debugElement.query(By.css('[data-testid="barcode-add-button"]')).nativeElement as HTMLButtonElement;
+    const clickSpy = spyOn(addButton, 'click').and.callThrough();
+
+    const input = fixture.debugElement.query(By.css('[data-testid="barcode-input"]'));
+    input.triggerEventHandler('keyup.enter', new KeyboardEvent('keyup', { key: 'Enter' }));
+
+    expect(apiSpy.addByBarcode).toHaveBeenCalledWith('111');
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it('should not submit empty barcode', () => {
+    component.barcodeInput = '   ';
+    component.submitBarcode();
+
+    expect(apiSpy.addByBarcode).not.toHaveBeenCalled();
+  });
+
+  it('should clear input after success', () => {
+    apiSpy.addByBarcode.and.returnValue(of(activeCart));
+    component.barcodeInput = '111';
+
+    component.submitBarcode();
+
+    expect(component.barcodeInput).toBe('');
+    expect(component.barcodeSuccessMessage).toBe('تمت إضافة المنتج');
+  });
+
+  it('should restore focus after success', fakeAsync(() => {
+    apiSpy.addByBarcode.and.returnValue(of(activeCart));
+    component.barcodeInput = '111';
+    const input = fixture.debugElement.query(By.css('[data-testid="barcode-input"]')).nativeElement as HTMLInputElement;
+
+    component.submitBarcode();
+    tick(0);
+
+    expect(document.activeElement).toBe(input);
+    tick(1500);
+  }));
+
+  it('should show PRODUCT_NOT_FOUND message', fakeAsync(() => {
+    const err = new HttpErrorResponse({ status: 404, error: { error: 'PRODUCT_NOT_FOUND' } });
+    apiSpy.addByBarcode.and.returnValue(throwError(() => err));
+    component.barcodeInput = 'BAD-CODE';
+    const input = fixture.debugElement.query(By.css('[data-testid="barcode-input"]')).nativeElement as HTMLInputElement;
+
+    component.submitBarcode();
+    tick(0);
+
+    expect(component.barcodeInput).toBe('');
+    expect(component.barcodeProcessing).toBeFalse();
+    expect(component.state.error).toBe('لم يتم العثور على منتج بهذا الباركود');
+    expect(document.activeElement).toBe(input);
+  }));
+
   // --- Add Product ---
-  it('clicking product adds line', () => {
+  it('should keep product grid click flow working', () => {
     apiSpy.addByProduct.and.returnValue(of(activeCart));
     component.onProductSelected(1);
     expect(apiSpy.addByProduct).toHaveBeenCalledWith(1);
