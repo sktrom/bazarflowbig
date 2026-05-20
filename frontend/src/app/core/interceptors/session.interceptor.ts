@@ -8,12 +8,11 @@ export class SessionInterceptor implements HttpInterceptor {
   constructor(private sessionService: SessionService) {}
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    const sessionId = this.sessionService.getSessionId();
+    const sessionToken = this.sessionService.getSessionToken();
 
-    if (sessionId) {
-      // Inject X-Session-Id header for protected API requests. No JWT logic.
+    if (sessionToken) {
       const clonedReq = req.clone({
-        headers: req.headers.set('X-Session-Id', sessionId)
+        headers: req.headers.set('X-Session-Token', sessionToken)
       });
       return next.handle(clonedReq);
     }

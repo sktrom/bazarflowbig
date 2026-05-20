@@ -13,8 +13,8 @@ export class AuthService {
     private sessionService: SessionService,
     private authApiService: AuthApiService
   ) {
-    // Initialize based on session presence
-    this.isAuthenticatedSubject.next(!!this.sessionService.getSessionId());
+    // Initialize based on session token presence
+    this.isAuthenticatedSubject.next(!!this.sessionService.getSessionToken());
   }
 
   setAuthenticated(isAuthenticated: boolean): void {

@@ -9,6 +9,7 @@ export interface StoredEmployee {
 @Injectable({ providedIn: 'root' })
 export class SessionService {
   private readonly SESSION_KEY = 'x_session_id';
+  private readonly SESSION_TOKEN_KEY = 'x_session_token';
   private readonly EMPLOYEE_KEY = 'session_employee';
 
   private readonly PERMISSIONS_KEY = 'session_permissions';
@@ -21,6 +22,14 @@ export class SessionService {
 
   getSessionId(): string | null {
     return localStorage.getItem(this.SESSION_KEY);
+  }
+
+  setSessionToken(token: string): void {
+    localStorage.setItem(this.SESSION_TOKEN_KEY, token);
+  }
+
+  getSessionToken(): string | null {
+    return localStorage.getItem(this.SESSION_TOKEN_KEY);
   }
 
   setEmployee(employee: StoredEmployee): void {
@@ -56,9 +65,9 @@ export class SessionService {
   }
 
   clearSession(): void {
+    localStorage.removeItem(this.SESSION_TOKEN_KEY);
     localStorage.removeItem(this.SESSION_KEY);
     localStorage.removeItem(this.EMPLOYEE_KEY);
     localStorage.removeItem(this.PERMISSIONS_KEY);
   }
 }
-

@@ -28,6 +28,14 @@ namespace Supermarket.Infrastructure.Repositories
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.Status == CashSessionStatus.Active);
         }
 
+        public async Task<CashSession?> GetActiveByTokenAsync(string token)
+        {
+            return await _context.CashSessions
+                .Include(s => s.Device)
+                .Include(s => s.Employee)
+                .FirstOrDefaultAsync(s => s.SessionToken == token && s.Status == CashSessionStatus.Active);
+        }
+
         public async Task<CashSession?> GetByIdAsync(long sessionId)
         {
             return await _context.CashSessions
@@ -40,6 +48,28 @@ namespace Supermarket.Infrastructure.Repositories
         {
             _context.CashSessions.Add(session);
             await _context.SaveChangesAsync();
+        }
+
+        public async Task TouchAsync(long sessionId, DateTime lastSeenAt, DateTime expiresAt)
+        {
+            var session = await _context.CashSessions.FindAsync(sessionId);
+            if (session != null && session.Status == CashSessionStatus.Active)
+            {
+                session.LastSeenAt = lastSeenAt;
+                session.ExpiresAt = expiresAt;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task ExpireAsync(long sessionId, DateTime endedAt)
+        {
+            var session = await _context.CashSessions.FindAsync(sessionId);
+            if (session != null && session.Status == CashSessionStatus.Active)
+            {
+                session.Status = CashSessionStatus.ForceClosed;
+                session.EndedAt = endedAt;
+                await _context.SaveChangesAsync();
+            }
         }
 
         public async Task CloseAsync(long sessionId, DateTime closedAt)

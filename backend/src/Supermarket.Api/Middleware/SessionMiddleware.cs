@@ -1,4 +1,5 @@
 using System.Linq;
+using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Supermarket.Api.Services;
@@ -9,6 +10,8 @@ namespace Supermarket.Api.Middleware
 {
     public class SessionMiddleware
     {
+        private static readonly TimeSpan RollingTimeout = TimeSpan.FromHours(8);
+        private static readonly TimeSpan TouchInterval = TimeSpan.FromSeconds(60);
         private readonly RequestDelegate _next;
 
         public SessionMiddleware(RequestDelegate next)
@@ -24,17 +27,31 @@ namespace Supermarket.Api.Middleware
             // Passive behavior: Start with a fresh unauthenticated context
             var context = new SessionContext { IsAuthenticated = false };
 
-            if (httpContext.Request.Headers.TryGetValue("X-Session-Id", out var values))
+            if (httpContext.Request.Headers.TryGetValue("X-Session-Token", out var values))
             {
-                if (long.TryParse(values.FirstOrDefault(), out var sessionId))
+                var token = values.FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(token) && token.Length >= 32)
                 {
-                    var session = await sessionRepo.GetActiveByIdAsync(sessionId);
+                    var now = DateTime.UtcNow;
+                    var session = await sessionRepo.GetActiveByTokenAsync(token);
                     if (session != null)
                     {
-                        context.SessionId = session.Id;
-                        context.EmployeeId = session.EmployeeId;
-                        context.DeviceCode = session.Device?.DeviceCode ?? string.Empty;
-                        context.IsAuthenticated = true;
+                        if (session.ExpiresAt.HasValue && session.ExpiresAt.Value <= now)
+                        {
+                            await sessionRepo.ExpireAsync(session.Id, now);
+                        }
+                        else
+                        {
+                            context.SessionId = session.Id;
+                            context.EmployeeId = session.EmployeeId;
+                            context.DeviceCode = session.Device?.DeviceCode ?? string.Empty;
+                            context.IsAuthenticated = true;
+
+                            if (!session.LastSeenAt.HasValue || now - session.LastSeenAt.Value >= TouchInterval)
+                            {
+                                await sessionRepo.TouchAsync(session.Id, now, now.Add(RollingTimeout));
+                            }
+                        }
                     }
                 }
             }

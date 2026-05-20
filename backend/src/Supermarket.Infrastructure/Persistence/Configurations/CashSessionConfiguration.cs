@@ -20,7 +20,15 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
             builder.Property(s => s.StartedAt)
                 .IsRequired();
 
+            builder.Property(s => s.SessionToken)
+                .HasMaxLength(128);
+
             builder.HasIndex(s => new { s.EmployeeId, s.Status });
+            builder.HasIndex(s => s.SessionToken)
+                .IsUnique()
+                .HasFilter("[SessionToken] IS NOT NULL");
+            builder.HasIndex(s => s.ExpiresAt);
+            builder.HasIndex(s => new { s.Status, s.ExpiresAt });
 
             builder.HasOne(s => s.Employee)
                 .WithMany()

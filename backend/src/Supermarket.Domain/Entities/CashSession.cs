@@ -15,6 +15,10 @@ namespace Supermarket.Domain.Entities
         
         public DateTime StartedAt { get; set; }
         public DateTime? EndedAt { get; set; }
+        public string? SessionToken { get; set; }
+        public DateTime? TokenCreatedAt { get; set; }
+        public DateTime? ExpiresAt { get; set; }
+        public DateTime? LastSeenAt { get; set; }
         
         public CashSessionStatus Status { get; set; }
     }

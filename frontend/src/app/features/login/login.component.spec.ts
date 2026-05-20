@@ -23,6 +23,7 @@ describe('LoginComponent', () => {
     employeeId: 1,
     fullName: 'أحمد علي',
     sessionId: 999,
+    sessionToken: 'session-token-123',
     deviceCode: 'DEV-01',
     allowedScreenKeys: ['Cashier', 'Invoices']
   };
@@ -32,8 +33,10 @@ describe('LoginComponent', () => {
     authServiceSpy = jasmine.createSpyObj('AuthService', ['isLoggedIn', 'setAuthenticated']);
     sessionServiceSpy = jasmine.createSpyObj('SessionService', [
       'setSessionId',
+      'setSessionToken',
       'setEmployee',
       'getSessionId',
+      'getSessionToken',
       'getDeviceCode',
       'setDeviceCode',
       'clearDeviceCode'
@@ -105,6 +108,13 @@ describe('LoginComponent', () => {
     component.loginForm.setValue({ username: 'user1', password: 'pass1' });
     component.onSubmit();
     expect(sessionServiceSpy.setSessionId).toHaveBeenCalledWith(999);
+  });
+
+  it('should store sessionToken after successful login', () => {
+    authApiSpy.login.and.returnValue(of(mockSuccessResponse));
+    component.loginForm.setValue({ username: 'user1', password: 'pass1' });
+    component.onSubmit();
+    expect(sessionServiceSpy.setSessionToken).toHaveBeenCalledWith('session-token-123');
   });
 
   it('should store allowedScreenKeys in PermissionsService after login', () => {
@@ -270,7 +280,11 @@ describe('SessionService', () => {
 
   it('should not clear device code when clearSession is called', () => {
     service.setDeviceCode('TEST-DEV');
+    service.setSessionToken('TOKEN-123');
+    service.setSessionId(99);
     service.clearSession();
     expect(service.getDeviceCode()).toBe('TEST-DEV');
+    expect(service.getSessionToken()).toBeNull();
+    expect(service.getSessionId()).toBeNull();
   });
 });

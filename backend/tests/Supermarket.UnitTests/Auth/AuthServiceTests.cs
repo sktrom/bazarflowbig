@@ -22,6 +22,7 @@ namespace Supermarket.UnitTests.Auth
         private readonly Mock<ISessionContextAccessor> _contextAccessorMock = new();
         private readonly Mock<ILoginThrottleService> _loginThrottleMock = new();
         private readonly Mock<IAuditLogService> _auditLogMock = new();
+        private readonly Mock<ISessionTokenGenerator> _sessionTokenGeneratorMock = new();
         private readonly AuthService _service;
 
         public AuthServiceTests()
@@ -34,11 +35,15 @@ namespace Supermarket.UnitTests.Auth
                 _passwordHasherMock.Object,
                 _contextAccessorMock.Object,
                 _loginThrottleMock.Object,
-                _auditLogMock.Object);
+                _auditLogMock.Object,
+                _sessionTokenGeneratorMock.Object);
 
             _loginThrottleMock
                 .Setup(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()))
                 .Returns(false);
+            _sessionTokenGeneratorMock
+                .Setup(g => g.Generate())
+                .Returns("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO12");
         }
 
         [Fact]
@@ -53,6 +58,7 @@ namespace Supermarket.UnitTests.Auth
             var result = await _service.LoginAsync(LoginRequest());
 
             Assert.Equal(employee.Id, result.EmployeeId);
+            Assert.Equal("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO12", result.SessionToken);
             _employeeRepoMock.Verify(
                 r => r.UpdatePasswordHashAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<DateTime>()),
                 Times.Never);
@@ -87,6 +93,35 @@ namespace Supermarket.UnitTests.Auth
             _employeeRepoMock.Verify(
                 r => r.UpdatePasswordHashAsync(employee.Id, "identity_hash", It.IsAny<DateTime>()),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task Login_ShouldCreateTokenAndTimeoutDates()
+        {
+            var employee = ActiveEmployee();
+            CashSession? createdSession = null;
+            SetupSuccessfulLoginDependencies(employee);
+            _sessionRepoMock
+                .Setup(r => r.CreateAsync(It.IsAny<CashSession>()))
+                .Callback<CashSession>(session =>
+                {
+                    session.Id = 99;
+                    createdSession = session;
+                })
+                .Returns(Task.CompletedTask);
+            _passwordHasherMock
+                .Setup(h => h.Verify("password", employee.PasswordHash))
+                .Returns(PasswordVerifyResult.Valid);
+
+            var result = await _service.LoginAsync(LoginRequest());
+
+            Assert.Equal("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO12", result.SessionToken);
+            Assert.NotNull(createdSession);
+            Assert.Equal(result.SessionToken, createdSession!.SessionToken);
+            Assert.NotNull(createdSession.TokenCreatedAt);
+            Assert.NotNull(createdSession.LastSeenAt);
+            Assert.NotNull(createdSession.ExpiresAt);
+            Assert.True(createdSession.ExpiresAt > createdSession.StartedAt);
         }
 
         [Fact]

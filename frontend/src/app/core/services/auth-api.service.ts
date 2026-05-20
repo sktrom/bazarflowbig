@@ -13,6 +13,7 @@ export interface LoginResponse {
   employeeId: number;
   fullName: string;
   sessionId: number;
+  sessionToken: string;
   deviceCode: string;
   allowedScreenKeys: string[];
 }

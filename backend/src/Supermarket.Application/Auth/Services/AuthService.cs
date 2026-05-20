@@ -20,6 +20,7 @@ namespace Supermarket.Application.Auth.Services
         private readonly ISessionContextAccessor _contextAccessor;
         private readonly ILoginThrottleService _loginThrottleService;
         private readonly IAuditLogService _auditLogService;
+        private readonly ISessionTokenGenerator _sessionTokenGenerator;
 
         public AuthService(
             IEmployeeRepository employeeRepo,
@@ -29,7 +30,8 @@ namespace Supermarket.Application.Auth.Services
             IPasswordHasher passwordHasher,
             ISessionContextAccessor contextAccessor,
             ILoginThrottleService loginThrottleService,
-            IAuditLogService auditLogService)
+            IAuditLogService auditLogService,
+            ISessionTokenGenerator sessionTokenGenerator)
         {
             _employeeRepo          = employeeRepo;
             _deviceRepo            = deviceRepo;
@@ -39,6 +41,7 @@ namespace Supermarket.Application.Auth.Services
             _contextAccessor       = contextAccessor;
             _loginThrottleService  = loginThrottleService;
             _auditLogService       = auditLogService;
+            _sessionTokenGenerator = sessionTokenGenerator;
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
@@ -83,11 +86,16 @@ namespace Supermarket.Application.Auth.Services
                 if (existingActive != null)
                     throw new InvalidOperationException("EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION");
 
+                var now = DateTime.UtcNow;
                 var newSession = new CashSession
                 {
                     EmployeeId = employee.Id,
                     DeviceId   = device.Id,
-                    StartedAt  = DateTime.UtcNow,
+                    StartedAt  = now,
+                    SessionToken = await GenerateUniqueSessionTokenAsync(),
+                    TokenCreatedAt = now,
+                    LastSeenAt = now,
+                    ExpiresAt = now.AddHours(8),
                     Status     = CashSessionStatus.Active
                 };
 
@@ -110,6 +118,7 @@ namespace Supermarket.Application.Auth.Services
                     EmployeeId      = employee.Id,
                     FullName        = employee.FullName,
                     SessionId       = newSession.Id,
+                    SessionToken    = newSession.SessionToken ?? string.Empty,
                     DeviceCode      = device.DeviceCode,
                     AllowedScreenKeys = new List<string>(allowedKeys)
                 };
@@ -154,6 +163,18 @@ namespace Supermarket.Application.Auth.Services
             {
                 // Audit is best-effort and must not block authentication behavior.
             }
+        }
+
+        private async Task<string> GenerateUniqueSessionTokenAsync()
+        {
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var token = _sessionTokenGenerator.Generate();
+                if (await _sessionRepo.GetActiveByTokenAsync(token) == null)
+                    return token;
+            }
+
+            throw new InvalidOperationException("SESSION_START_FAILED");
         }
 
         public async Task<LogoutResponse> LogoutAsync(long sessionId)

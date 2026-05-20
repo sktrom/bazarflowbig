@@ -235,6 +235,7 @@ export class LoginComponent implements OnInit {
       next: (response) => {
         // 1. Store session ID (numeric from backend)
         this.sessionService.setSessionId(response.sessionId);
+        this.sessionService.setSessionToken(response.sessionToken);
 
         // 2. Store employee basics
         this.sessionService.setEmployee({
