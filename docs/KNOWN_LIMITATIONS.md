@@ -7,4 +7,5 @@
 * **Device Code:** المتغير `deviceCode` في V1 ثابت كـ `DEFAULT_DEVICE`.
 * **Store Settings:** إعدادات المتجر مثل `StoreName` و `ExchangeRate` في شاشة Settings معروضة للقراءة فقط (read-only) حاليًا من الواجهة.
 * **Secrets Management:** ملفات الإعدادات المتتبعة لا يجب أن تحتوي كلمات مرور قاعدة البيانات. يجب ضبط أسرار الإنتاج عبر environment variables أو secret manager قبل أي release حقيقي.
+* **Reverse Proxy / Certificates:** إعدادات `ForwardedHeaders` وإدارة شهادات HTTPS الخاصة بالنشر ليست مضمنة بعد، وتبقى مسؤولية مرحلة deployment لاحقة.
 * **Production Readiness:** هذه النسخة مناسبة للتشغيل المحلي/التجريبي وليست production نهائية، ويُنصح بعدم إطلاقها للجمهور بدون مراجعة أمنية شاملة لبيئة الإنتاج.

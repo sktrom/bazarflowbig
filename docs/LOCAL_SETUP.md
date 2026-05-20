@@ -47,6 +47,15 @@ npx ng serve
 * **Frontend UI:** http://localhost:4200
 * **Backend API:** http://localhost:5070
 
+## Local CORS / Hosts
+Local development allows the Angular dev server origins:
+
+* `http://localhost:4200`
+* `https://localhost:4200`
+
+Development configuration may use `AllowedHosts: "*"`. Production must set
+explicit hosts and CORS origins through configuration or environment variables.
+
 ## Test Credentials
 Use the first-run setup wizard to create the first administrator account and POS device.
 

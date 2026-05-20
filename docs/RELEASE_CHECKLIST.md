@@ -21,3 +21,9 @@ Verify the following before making a final production release:
 - [ ] production SQL login does not use `sa`
 - [ ] SQL password rotated after any accidental exposure
 - [ ] SQL encryption settings reviewed for the deployment environment
+- [ ] production `Cors__AllowedOrigins__0` environment variable configured
+- [ ] no wildcard CORS origins configured in production
+- [ ] production `AllowedHosts` is not `*`
+- [ ] Swagger is not available in Production
+- [ ] HTTPS redirection verified
+- [ ] HSTS verified outside Development

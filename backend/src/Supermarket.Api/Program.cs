@@ -5,6 +5,7 @@ using Supermarket.Application.Common.Interfaces;
 using Supermarket.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+const string CorsPolicyName = "BazarFlowCorsPolicy";
 
 builder.Services.AddControllers();
 
@@ -20,11 +21,31 @@ builder.Services.AddScoped<ISessionContext>(sp => sp.GetRequiredService<SessionC
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var allowedOrigins = builder.Environment.IsDevelopment()
+    ? new[] { "http://localhost:4200", "https://localhost:4200" }
+    : builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()?
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Select(origin => origin.Trim())
+        .ToArray() ?? Array.Empty<string>();
+
+if (!builder.Environment.IsDevelopment())
+{
+    if (allowedOrigins.Length == 0)
+    {
+        throw new InvalidOperationException("Cors:AllowedOrigins must be configured in non-development environments.");
+    }
+
+    if (allowedOrigins.Any(origin => origin == "*" || origin.Contains('*')))
+    {
+        throw new InvalidOperationException("Cors:AllowedOrigins must not contain wildcards in non-development environments.");
+    }
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("LocalDevPolicy", policy =>
+    options.AddPolicy(CorsPolicyName, policy =>
     {
-        policy.WithOrigins("http://localhost:4200")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -38,9 +59,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
 
-app.UseCors("LocalDevPolicy");
+app.UseCors(CorsPolicyName);
 
 // Passive session middleware — populates ISessionContext, never short-circuits
 app.UseMiddleware<SessionMiddleware>();
