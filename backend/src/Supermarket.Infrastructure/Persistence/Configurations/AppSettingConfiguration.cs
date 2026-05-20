@@ -36,7 +36,9 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
             builder.HasData(
                 new AppSetting { Id = 1, SettingKey = "exchange_rate_syp", SettingValue = "15000", UpdatedAt = fixedSeedDate },
                 new AppSetting { Id = 2, SettingKey = "stock_alert_threshold", SettingValue = "10", UpdatedAt = fixedSeedDate },
-                new AppSetting { Id = 3, SettingKey = "expiry_alert_days", SettingValue = "30", UpdatedAt = fixedSeedDate }
+                new AppSetting { Id = 3, SettingKey = "expiry_alert_days", SettingValue = "30", UpdatedAt = fixedSeedDate },
+                new AppSetting { Id = 4, SettingKey = "setup_completed", SettingValue = "false", UpdatedAt = fixedSeedDate },
+                new AppSetting { Id = 5, SettingKey = "store_name", SettingValue = "BazarFlow", UpdatedAt = fixedSeedDate }
             );
         }
     }

@@ -22,10 +22,12 @@ namespace Supermarket.Api.Controllers
         {
             // Minimal public settings for frontend bootstrap
             var exchangeRateSetting = await _db.AppSettings
-                .FirstOrDefaultAsync(s => s.SettingKey == "ExchangeRateSyp");
+                .FirstOrDefaultAsync(s => s.SettingKey == "exchange_rate_syp")
+                ?? await _db.AppSettings.FirstOrDefaultAsync(s => s.SettingKey == "ExchangeRateSyp");
             
             var storeNameSetting = await _db.AppSettings
-                .FirstOrDefaultAsync(s => s.SettingKey == "StoreName");
+                .FirstOrDefaultAsync(s => s.SettingKey == "store_name")
+                ?? await _db.AppSettings.FirstOrDefaultAsync(s => s.SettingKey == "StoreName");
 
             decimal exchangeRate = 0;
             if (exchangeRateSetting != null && decimal.TryParse(exchangeRateSetting.SettingValue, out var rate))
