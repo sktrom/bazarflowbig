@@ -6,6 +6,22 @@
 * Angular CLI (if required globally)
 * SQL Server
 
+## Local Development vs Deployment
+
+Local development uses source projects directly:
+
+* `dotnet run` starts the backend from source for development only.
+* `ng serve` starts the Angular dev server for development only.
+* Development CORS allows the Angular dev server origins.
+
+Deployment uses published artifacts:
+
+* backend is published with `scripts\build-backend.ps1` into `artifacts\backend`.
+* frontend is built with `scripts\build-frontend.ps1` into `artifacts\frontend`.
+* backend is started from `artifacts\backend\Supermarket.Api.exe` through `scripts\run-backend.ps1`.
+* frontend files are served by IIS or another static file server.
+* production settings must be provided through environment variables, not user-secrets or tracked files.
+
 ## Backend Commands
 `appsettings.json` does not store the database password. Configure the local
 connection string with user-secrets before running migrations or the API:
@@ -33,6 +49,9 @@ dotnet ef database update --project src/Supermarket.Infrastructure --startup-pro
 dotnet run --project src\Supermarket.Api
 ```
 
+`dotnet run` is for local development only. Use the published executable in
+`artifacts\backend` for deployment.
+
 ## Frontend Commands
 Open a new terminal and run:
 ```bash
@@ -42,6 +61,9 @@ npx ng build --configuration development
 npx ng test
 npx ng serve
 ```
+
+`ng serve` is for local development only. Use `npx ng build --configuration production`
+or `scripts\build-frontend.ps1` for deployment, then serve the generated static files.
 
 ## System URLs
 * **Frontend UI:** http://localhost:4200

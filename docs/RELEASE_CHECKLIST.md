@@ -4,9 +4,12 @@ Verify the following before making a final production release:
 
 - [ ] `git status` clean
 - [ ] backend build successful
+- [ ] backend published to `artifacts/backend`
 - [ ] backend unit tests passed
 - [ ] backend integration tests passed
 - [ ] frontend build successful
+- [ ] frontend production build generated in `artifacts/frontend`
+- [ ] `frontend/src/environments/environment.prod.ts` does not contain `YOUR_API_HOST`
 - [ ] frontend tests passed
 - [ ] database migration applied successfully
 - [ ] admin login verified
@@ -18,12 +21,18 @@ Verify the following before making a final production release:
 - [ ] default admin password changed before real production
 - [ ] no real database connection string is stored in tracked files
 - [ ] production `ConnectionStrings__DefaultConnection` environment variable configured
+- [ ] production `Cors__AllowedOrigins__0` environment variable configured
+- [ ] production `AllowedHosts` is not wildcard
 - [ ] production SQL login does not use `sa`
+- [ ] SQL user is not `sa`
 - [ ] SQL password rotated after any accidental exposure
 - [ ] SQL encryption settings reviewed for the deployment environment
-- [ ] production `Cors__AllowedOrigins__0` environment variable configured
 - [ ] no wildcard CORS origins configured in production
 - [ ] production `AllowedHosts` is not `*`
+- [ ] backup folder ACL verified for the SQL Server service account
+- [ ] first-run setup verified
 - [ ] Swagger is not available in Production
+- [ ] Swagger off in Production
 - [ ] HTTPS redirection verified
 - [ ] HSTS verified outside Development
+- [ ] HTTPS/HSTS verified
