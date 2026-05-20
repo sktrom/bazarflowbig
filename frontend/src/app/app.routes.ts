@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './core/guards/auth.guard';
+import { SetupGuard } from './core/guards/setup.guard';
 import { ScreenPermissionGuard } from './core/guards/screen-permission.guard';
 import { ShellComponent } from './shell/shell.component';
 import { UnauthorizedComponent } from './core/pages/unauthorized.component';
@@ -8,6 +9,14 @@ import { NotFoundComponent } from './core/pages/not-found.component';
 export const routes: Routes = [
   // Default: redirect to login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
+
+  // Public Setup
+  {
+    path: 'setup',
+    canActivate: [SetupGuard],
+    loadComponent: () =>
+      import('./features/setup/setup.component').then(m => m.SetupComponent)
+  },
 
   // Public: Login
   {
