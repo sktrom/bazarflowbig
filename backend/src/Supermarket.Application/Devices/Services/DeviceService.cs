@@ -223,6 +223,9 @@ namespace Supermarket.Application.Devices.Services
             if (device == null)
                 throw new InvalidOperationException("DEVICE_NOT_FOUND");
 
+            if (device.DeviceCode == "DEFAULT_DEVICE")
+                throw new InvalidOperationException("CANNOT_DELETE_DEFAULT_DEVICE");
+
             var hasSessions = await _deviceRepo.HasSessionsAsync(id);
             if (hasSessions)
             {

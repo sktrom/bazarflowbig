@@ -12,6 +12,7 @@ import { PermissionsService } from '../../core/services/permissions.service';
 
 describe('LoginComponent', () => {
   let component: LoginComponent;
+  let fixture: any;
   let authApiSpy: jasmine.SpyObj<AuthApiService>;
   let authServiceSpy: jasmine.SpyObj<AuthService>;
   let sessionServiceSpy: jasmine.SpyObj<SessionService>;
@@ -54,7 +55,7 @@ describe('LoginComponent', () => {
       ]
     }).compileComponents();
 
-    const fixture = TestBed.createComponent(LoginComponent);
+    fixture = TestBed.createComponent(LoginComponent);
     component = fixture.componentInstance;
     component.ngOnInit();
   });
@@ -231,6 +232,21 @@ describe('LoginComponent', () => {
   it('should not store empty device code on save', () => {
     component.saveDeviceCode('   ');
     expect(sessionServiceSpy.setDeviceCode).not.toHaveBeenCalled();
+  });
+
+  it('should show warning banner when device code is DEFAULT_DEVICE', () => {
+    sessionServiceSpy.getDeviceCode.and.returnValue(null);
+    fixture.detectChanges();
+    const banner = fixture.nativeElement.querySelector('#default-device-warning');
+    expect(banner).toBeTruthy();
+    expect(banner.textContent).toContain('أنت تستخدم الجهاز الافتراضي العام');
+  });
+
+  it('should not show warning banner when device code is custom', () => {
+    sessionServiceSpy.getDeviceCode.and.returnValue('DEV-102');
+    fixture.detectChanges();
+    const banner = fixture.nativeElement.querySelector('#default-device-warning');
+    expect(banner).toBeNull();
   });
 });
 

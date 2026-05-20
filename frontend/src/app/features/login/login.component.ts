@@ -101,6 +101,16 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
 
           </form>
 
+          <!-- Default Device Warning Banner -->
+          <div
+            *ngIf="deviceCode === 'DEFAULT_DEVICE'"
+            id="default-device-warning"
+            class="mt-5 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800 text-center leading-relaxed"
+            role="alert"
+          >
+            أنت تستخدم الجهاز الافتراضي العام. يوصى بإنشاء جهاز مخصص من الإعدادات لضمان دقة التقارير والأمان.
+          </div>
+
           <!-- Device Info -->
           <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <div>

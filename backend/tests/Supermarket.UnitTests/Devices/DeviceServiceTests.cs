@@ -171,5 +171,19 @@ namespace Supermarket.UnitTests.Devices
             _deviceRepoMock.Verify(r => r.DeleteAsync(7L), Times.Never);
             _deviceRepoMock.Verify(r => r.UpdateAsync(It.Is<PosDevice>(d => d.IsActive == false)), Times.Once);
         }
+
+        [Fact]
+        public async Task DeleteDevice_ShouldThrow_WhenDeviceIsDefaultDevice()
+        {
+            var device = new PosDevice { Id = 1L, DeviceCode = "DEFAULT_DEVICE", DeviceName = "Default Device", IsActive = true };
+            _deviceRepoMock.Setup(r => r.GetByIdAsync(1L)).ReturnsAsync(device);
+
+            var service = new DeviceService(_deviceRepoMock.Object, _auditLogMock.Object);
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteDeviceAsync(1L));
+
+            Assert.Equal("CANNOT_DELETE_DEFAULT_DEVICE", exception.Message);
+            _deviceRepoMock.Verify(r => r.DeleteAsync(It.IsAny<long>()), Times.Never);
+            _deviceRepoMock.Verify(r => r.UpdateAsync(It.IsAny<PosDevice>()), Times.Never);
+        }
     }
 }

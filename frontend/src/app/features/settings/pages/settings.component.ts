@@ -24,7 +24,9 @@ const ERR: Record<string,string> = {
   DEVICE_NAME_REQUIRED: 'اسم الجهاز مطلوب',
   DEVICE_CODE_ALREADY_EXISTS: 'رمز الجهاز هذا مسجل مسبقًا',
   DEVICE_NOT_FOUND: 'الجهاز غير موجود',
-  CANNOT_DISABLE_LAST_ACTIVE_DEVICE: 'لا يمكن تعطيل الجهاز النشط الوحيد في النظام',
+  CANNOT_DISABLE_LAST_ACTIVE_DEVICE: 'لا يمكن تعطيل آخر جهاز نشط',
+  LAST_ACTIVE_DEVICE: 'لا يمكن تعطيل آخر جهاز نشط',
+  CANNOT_DELETE_DEFAULT_DEVICE: 'لا يمكن حذف جهاز النظام الافتراضي',
 };
 
 function mapErr(e: HttpErrorResponse): string {
@@ -277,7 +279,10 @@ function mapErr(e: HttpErrorResponse): string {
             <tbody class="divide-y divide-slate-100">
               <tr *ngIf="!devices.length"><td colspan="6" class="py-8 text-center text-slate-400">لا توجد أجهزة مسجلة</td></tr>
               <tr *ngFor="let d of devices" class="hover:bg-slate-50">
-                <td class="px-4 py-3 font-medium">{{d.deviceName}}</td>
+                <td class="px-4 py-3 font-medium">
+                  {{d.deviceName}}
+                  <span *ngIf="d.deviceCode==='DEFAULT_DEVICE'" class="mr-2 px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded text-[10px] font-semibold">جهاز النظام الافتراضي</span>
+                </td>
                 <td class="px-4 py-3 font-mono text-slate-500">
                   <div class="flex items-center gap-2">
                     <span>{{d.deviceCode}}</span>

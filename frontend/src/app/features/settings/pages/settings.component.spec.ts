@@ -285,4 +285,37 @@ describe('SettingsComponent', () => {
     expect(apiSpy.deleteDevice).toHaveBeenCalledWith(12);
     expect(component.toast).toBe('تم حذف الجهاز بنجاح');
   });
+
+  it('should show default device badge in HTML template when deviceCode is DEFAULT_DEVICE', () => {
+    component.switchTab('devices');
+    component.devices = [
+      { id: 1, deviceCode: 'DEFAULT_DEVICE', deviceName: 'Default Register', isActive: true, createdAt: '2026-05-19' }
+    ];
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('جهاز النظام الافتراضي');
+  });
+
+  it('should show toast error message when deleting DEFAULT_DEVICE', () => {
+    const d = { id: 1, deviceCode: 'DEFAULT_DEVICE', deviceName: 'Default Register', isActive: true, createdAt: '2026-05-19' };
+    component.openDeviceDelete(d);
+    expect(component.toast).toBe('لا يمكن حذف جهاز النظام الافتراضي');
+  });
+
+  it('should map CANNOT_DELETE_DEFAULT_DEVICE error and display in toast', () => {
+    const err = new HttpErrorResponse({ error: { error: 'CANNOT_DELETE_DEFAULT_DEVICE' }, status: 400 });
+    apiSpy.deleteDevice.and.returnValue(throwError(() => err));
+    component.actionDevice = { id: 1, deviceCode: 'DEFAULT_DEVICE', deviceName: 'Default Register', isActive: true, createdAt: '2026-05-19' };
+    component.activeModal = 'deviceDelete';
+    component.confirmDeleteDevice();
+    expect(component.toast).toBe('لا يمكن حذف جهاز النظام الافتراضي');
+  });
+
+  it('should map CANNOT_DISABLE_LAST_ACTIVE_DEVICE error and display in toast', () => {
+    const err = new HttpErrorResponse({ error: { error: 'CANNOT_DISABLE_LAST_ACTIVE_DEVICE' }, status: 400 });
+    apiSpy.disableDevice.and.returnValue(throwError(() => err));
+    const d = { id: 10, deviceCode: 'POS-10', deviceName: 'Counter 10', isActive: true, createdAt: '2026-05-19' };
+    component.toggleDeviceActive(d);
+    expect(component.toast).toBe('لا يمكن تعطيل آخر جهاز نشط');
+  });
 });
