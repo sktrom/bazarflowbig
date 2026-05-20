@@ -142,30 +142,31 @@ describe('LoginComponent', () => {
 
   // --- Error mapping ---
 
-  it('should show credentials error on 400 INVALID_CREDENTIALS', () => {
-    const err = new HttpErrorResponse({ status: 400, error: { error: 'INVALID_CREDENTIALS' } });
+  it('should show generic login error on LOGIN_FAILED', () => {
+    const err = new HttpErrorResponse({ status: 401, error: { error: 'LOGIN_FAILED' } });
     authApiSpy.login.and.returnValue(throwError(() => err));
     component.loginForm.setValue({ username: 'user1', password: 'pass1' });
     component.onSubmit();
-    expect(component.apiError).toContain('غير صحيحة');
+    expect(component.apiError).toBe('تعذر تسجيل الدخول. تحقق من البيانات أو الجهاز.');
   });
 
-  it('should show correct error message and change-device link on 400 DEVICE_NOT_FOUND', () => {
-    const err = new HttpErrorResponse({ status: 400, error: { error: 'DEVICE_NOT_FOUND' } });
+  it('should show throttling error on 429 LOGIN_THROTTLED', () => {
+    const err = new HttpErrorResponse({ status: 429, error: { error: 'LOGIN_THROTTLED' } });
     authApiSpy.login.and.returnValue(throwError(() => err));
     component.loginForm.setValue({ username: 'user1', password: 'pass1' });
     component.onSubmit();
-    expect(component.apiError).toBe('رمز الجهاز غير معرّف في النظام. يرجى التحقق من صحة الرمز.');
-    expect(component.lastErrorCode).toBe('DEVICE_NOT_FOUND');
+    expect(component.apiError).toBe('تم تجاوز عدد المحاولات. حاول بعد قليل.');
   });
 
-  it('should show correct error message and change-device link on DEVICE_INACTIVE', () => {
-    const err = new HttpErrorResponse({ status: 403, error: { error: 'DEVICE_INACTIVE' } });
+  it('should keep change-device action available after generic login failure', () => {
+    const err = new HttpErrorResponse({ status: 401, error: { error: 'LOGIN_FAILED' } });
     authApiSpy.login.and.returnValue(throwError(() => err));
     component.loginForm.setValue({ username: 'user1', password: 'pass1' });
     component.onSubmit();
-    expect(component.apiError).toBe('هذا الجهاز معطّل، يرجى مراجعة مدير النظام لتفعيله.');
-    expect(component.lastErrorCode).toBe('DEVICE_INACTIVE');
+    fixture.detectChanges();
+
+    const buttons = Array.from(fixture.nativeElement.querySelectorAll('button')) as HTMLButtonElement[];
+    expect(buttons.some(button => button.textContent?.includes('تغيير الجهاز'))).toBeTrue();
   });
 
   it('should show active session error on 409', () => {

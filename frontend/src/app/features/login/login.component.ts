@@ -74,15 +74,6 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
               role="alert"
             >
               <div>{{ apiError }}</div>
-              <div *ngIf="lastErrorCode === 'DEVICE_NOT_FOUND' || lastErrorCode === 'DEVICE_INACTIVE'" class="mt-2 text-center">
-                <button
-                  type="button"
-                  (click)="openDeviceModal()"
-                  class="text-xs font-semibold text-red-700 hover:text-red-900 underline"
-                >
-                  تغيير رمز الجهاز الآن
-                </button>
-              </div>
             </div>
 
             <!-- Submit Button -->
@@ -287,19 +278,12 @@ export class LoginComponent implements OnInit {
   private mapApiError(err: HttpErrorResponse): string {
     const errorCode = err.error?.error as string | undefined;
 
-    if (errorCode === 'DEVICE_NOT_FOUND') {
-      return 'رمز الجهاز غير معرّف في النظام. يرجى التحقق من صحة الرمز.';
+    if (err.status === 429 || errorCode === 'LOGIN_THROTTLED') {
+      return 'تم تجاوز عدد المحاولات. حاول بعد قليل.';
     }
 
-    if (errorCode === 'DEVICE_INACTIVE') {
-      return 'هذا الجهاز معطّل، يرجى مراجعة مدير النظام لتفعيله.';
-    }
-
-    if (err.status === 400) {
-      if (errorCode === 'INVALID_CREDENTIALS' || errorCode === 'EMPLOYEE_NOT_FOUND') {
-        return 'اسم المستخدم أو كلمة المرور غير صحيحة';
-      }
-      return 'اسم المستخدم أو كلمة المرور غير صحيحة';
+    if (err.status === 401 || errorCode === 'LOGIN_FAILED') {
+      return 'تعذر تسجيل الدخول. تحقق من البيانات أو الجهاز.';
     }
 
     if (err.status === 409 && errorCode === 'EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION') {

@@ -31,11 +31,17 @@ namespace Supermarket.Api.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message == "INVALID_CREDENTIALS" || ex.Message == "EMPLOYEE_NOT_FOUND" || ex.Message == "DEVICE_NOT_FOUND")
-                    return BadRequest(new { error = ex.Message });
+                if (ex.Message == "LOGIN_FAILED")
+                    return Unauthorized(new { error = ex.Message });
+
+                if (ex.Message == "LOGIN_THROTTLED")
+                    return StatusCode(429, new { error = ex.Message });
                     
                 if (ex.Message == "EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION")
                     return Conflict(new { error = ex.Message });
+
+                if (ex.Message == "SESSION_START_FAILED")
+                    return StatusCode(500, new { error = ex.Message });
 
                 return StatusCode(403, new { error = ex.Message });
             }
