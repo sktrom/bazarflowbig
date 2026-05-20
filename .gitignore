@@ -16,6 +16,7 @@ obj/
 .env
 .env.local
 appsettings.Development.json
+appsettings.Local.json
 
 # Logs
 *.log

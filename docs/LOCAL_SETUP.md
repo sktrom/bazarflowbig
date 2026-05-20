@@ -7,6 +7,21 @@
 * SQL Server
 
 ## Backend Commands
+`appsettings.json` does not store the database password. Configure the local
+connection string with user-secrets before running migrations or the API:
+
+```bash
+cd backend
+dotnet user-secrets init --project src\Supermarket.Api
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost\SQLEXPRESS;Database=SupermarketDb;User Id=bazarflow_app;Password=<local-password>;TrustServerCertificate=True;Encrypt=False;" --project src\Supermarket.Api
+```
+
+Alternative for a terminal-only session:
+
+```bash
+set ConnectionStrings__DefaultConnection=Server=localhost\SQLEXPRESS;Database=SupermarketDb;User Id=bazarflow_app;Password=<local-password>;TrustServerCertificate=True;Encrypt=False;
+```
+
 Run the following commands in the terminal:
 ```bash
 cd backend
@@ -33,8 +48,8 @@ npx ng serve
 * **Backend API:** http://localhost:5070
 
 ## Test Credentials
-* **Username:** `admin`
-* **Password:** `admin123`
-* **Device Code:** `DEFAULT_DEVICE`
+Use the first-run setup wizard to create the first administrator account and POS device.
 
-> **Note:** The `deviceCode` is fixed to `DEFAULT_DEVICE` inside the UI for V1.
+> **Note:** `Encrypt=False` is acceptable only for local SQL Server Express development.
+> For production or paid beta deployments, configure the connection string through
+> environment variables, use a dedicated SQL user, and review SQL encryption settings.

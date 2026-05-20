@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Sessions.Interfaces;
@@ -29,9 +30,13 @@ namespace Supermarket.Infrastructure
             this IServiceCollection services,
             IConfiguration configuration)
         {
+            var connectionString = configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException("DefaultConnection is not configured. Set ConnectionStrings__DefaultConnection or user-secrets.");
+
             // EF Core — only Infrastructure knows about DbContext
             services.AddDbContext<SupermarketDbContext>(options =>
-                options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+                options.UseSqlServer(connectionString));
 
             // Repository implementations (all EF-backed)
             services.AddScoped<IAuditLogRepository, AuditLogRepository>();

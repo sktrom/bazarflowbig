@@ -1,44 +1,58 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
+using System;
 using System.IO;
+using System.Linq;
 
 namespace Supermarket.Infrastructure.Persistence
 {
     public class SupermarketDbContextFactory : IDesignTimeDbContextFactory<SupermarketDbContext>
     {
+        private const string ApiUserSecretsId = "bazarflow-supermarket-api";
+        private const string MissingConnectionStringMessage =
+            "DefaultConnection is not configured. Set ConnectionStrings__DefaultConnection or user-secrets.";
+
         public SupermarketDbContext CreateDbContext(string[] args)
         {
-            var fallbackConnection = "Server=DESKTOP-G6MOPDS\\SQLEXPRESS;Database=SupermarketDb;User Id=sa;Password=123456;TrustServerCertificate=True;Encrypt=False;";
-            var connectionString = fallbackConnection;
+            var basePath = ResolveApiProjectPath();
+            var builder = new ConfigurationBuilder();
 
-            try
+            if (!string.IsNullOrWhiteSpace(basePath))
             {
-                var basePath = Path.Combine(Directory.GetCurrentDirectory(), "../Supermarket.Api");
-                if (Directory.Exists(basePath))
-                {
-                    var builder = new ConfigurationBuilder()
-                        .SetBasePath(basePath)
-                        .AddJsonFile("appsettings.json", optional: true)
-                        .AddJsonFile("appsettings.Development.json", optional: true);
+                builder.SetBasePath(basePath)
+                    .AddJsonFile("appsettings.json", optional: true)
+                    .AddJsonFile("appsettings.Development.json", optional: true);
+            }
 
-                    var configuration = builder.Build();
-                    var parsedConn = configuration.GetConnectionString("DefaultConnection");
-                    if (!string.IsNullOrWhiteSpace(parsedConn))
-                    {
-                        connectionString = parsedConn;
-                    }
-                }
-            }
-            catch
-            {
-                // Ignore any configuration parsing errors during design time and rely on the fallback
-            }
+            builder.AddUserSecrets(ApiUserSecretsId, reloadOnChange: false)
+                .AddEnvironmentVariables();
+
+            var configuration = builder.Build();
+            var connectionString = configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new InvalidOperationException(MissingConnectionStringMessage);
 
             var optionsBuilder = new DbContextOptionsBuilder<SupermarketDbContext>();
             optionsBuilder.UseSqlServer(connectionString);
 
             return new SupermarketDbContext(optionsBuilder.Options);
+        }
+
+        private static string? ResolveApiProjectPath()
+        {
+            var current = Directory.GetCurrentDirectory();
+            var candidates = new[]
+            {
+                current,
+                Path.Combine(current, "src", "Supermarket.Api"),
+                Path.Combine(current, "..", "Supermarket.Api"),
+                Path.Combine(current, "..", "src", "Supermarket.Api")
+            };
+
+            return candidates
+                .Select(Path.GetFullPath)
+                .FirstOrDefault(path => File.Exists(Path.Combine(path, "appsettings.json")));
         }
     }
 }
