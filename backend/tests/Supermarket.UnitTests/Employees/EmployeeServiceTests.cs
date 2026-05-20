@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Moq;
 using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Common.Interfaces;
+using Supermarket.Application.Common.Services;
 using Supermarket.Application.Employees.Interfaces;
 using Supermarket.Application.Employees.Services;
 using Supermarket.Contracts.Employees;
@@ -55,6 +56,36 @@ namespace Supermarket.UnitTests.Employees
             Assert.Equal("Test Employee", result.FullName);
             _passwordHasherMock.Verify(h => h.Hash("password123"), Times.Once);
             _employeeRepoMock.Verify(r => r.CreateAsync(It.Is<Employee>(e => e.PasswordHash == "hashed_password")), Times.Once);
+        }
+
+        [Fact]
+        public async Task CreateEmployee_ShouldUseNewHash()
+        {
+            var passwordHasher = new PasswordHasher();
+            var service = new EmployeeService(
+                _employeeRepoMock.Object,
+                _permissionRepoMock.Object,
+                passwordHasher,
+                _auditLogMock.Object);
+            Employee? createdEmployee = null;
+            var request = new CreateEmployeeRequest
+            {
+                FullName = "Test Employee",
+                Username = "testuser",
+                Password = "password123"
+            };
+            _employeeRepoMock.Setup(r => r.GetByUsernameAsync(request.Username)).ReturnsAsync((Employee?)null);
+            _employeeRepoMock
+                .Setup(r => r.CreateAsync(It.IsAny<Employee>()))
+                .Callback<Employee>(employee => createdEmployee = employee)
+                .ReturnsAsync((Employee employee) => employee);
+            _permissionRepoMock.Setup(r => r.GetFullPermissionsAsync(It.IsAny<long>())).ReturnsAsync(new List<EmployeePermissionView>());
+
+            await service.CreateAsync(request);
+
+            Assert.NotNull(createdEmployee);
+            Assert.NotEqual(request.Password, createdEmployee!.PasswordHash);
+            Assert.Equal(PasswordVerifyResult.Valid, passwordHasher.Verify(request.Password, createdEmployee.PasswordHash));
         }
 
         [Fact]
@@ -120,6 +151,30 @@ namespace Supermarket.UnitTests.Employees
                 null,
                 It.Is<object>(metadata => !metadata.ToString()!.Contains("new-password", StringComparison.OrdinalIgnoreCase))),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task ResetPassword_ShouldUseNewHash()
+        {
+            var passwordHasher = new PasswordHasher();
+            var service = new EmployeeService(
+                _employeeRepoMock.Object,
+                _permissionRepoMock.Object,
+                passwordHasher,
+                _auditLogMock.Object);
+            var employee = new Employee
+            {
+                Id = 7,
+                FullName = "Ali",
+                Username = "ali",
+                PasswordHash = "old_hash"
+            };
+            _employeeRepoMock.Setup(r => r.GetByIdAsync(7)).ReturnsAsync(employee);
+
+            await service.ResetPasswordAsync(7, new ResetPasswordRequest { NewPassword = "new-password" });
+
+            Assert.NotEqual("new-password", employee.PasswordHash);
+            Assert.Equal(PasswordVerifyResult.Valid, passwordHasher.Verify("new-password", employee.PasswordHash));
         }
     }
 }

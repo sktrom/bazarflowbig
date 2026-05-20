@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Supermarket.Application.Auth.Interfaces;
@@ -19,6 +20,17 @@ namespace Supermarket.Infrastructure.Repositories
         public async Task<Employee?> GetByIdAsync(long employeeId)
         {
             return await _context.Employees.FindAsync(employeeId);
+        }
+
+        public async Task UpdatePasswordHashAsync(long employeeId, string passwordHash, DateTime updatedAt)
+        {
+            var employee = await _context.Employees.FindAsync(employeeId);
+            if (employee == null)
+                throw new InvalidOperationException("EMPLOYEE_NOT_FOUND");
+
+            employee.PasswordHash = passwordHash;
+            employee.UpdatedAt = updatedAt;
+            await _context.SaveChangesAsync();
         }
     }
 }

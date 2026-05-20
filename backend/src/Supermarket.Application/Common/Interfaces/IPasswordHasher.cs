@@ -1,8 +1,15 @@
 namespace Supermarket.Application.Common.Interfaces
 {
+    public enum PasswordVerifyResult
+    {
+        Invalid = 0,
+        Valid = 1,
+        ValidNeedsRehash = 2
+    }
+
     public interface IPasswordHasher
     {
         string Hash(string plainText);
-        bool Verify(string plainText, string hash);
+        PasswordVerifyResult Verify(string plainText, string storedHash);
     }
 }

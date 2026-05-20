@@ -43,8 +43,16 @@ namespace Supermarket.Application.Auth.Services
             if (!employee.IsActive)
                 throw new InvalidOperationException("EMPLOYEE_INACTIVE");
 
-            if (!_passwordHasher.Verify(request.Password, employee.PasswordHash))
+            var passwordResult = _passwordHasher.Verify(request.Password, employee.PasswordHash);
+            if (passwordResult == PasswordVerifyResult.Invalid)
                 throw new InvalidOperationException("INVALID_CREDENTIALS");
+
+            if (passwordResult == PasswordVerifyResult.ValidNeedsRehash)
+            {
+                var updatedHash = _passwordHasher.Hash(request.Password);
+                await _employeeRepo.UpdatePasswordHashAsync(employee.Id, updatedHash, DateTime.UtcNow);
+                employee.PasswordHash = updatedHash;
+            }
 
             var device = await _deviceRepo.GetByCodeAsync(request.DeviceCode);
             if (device == null)
