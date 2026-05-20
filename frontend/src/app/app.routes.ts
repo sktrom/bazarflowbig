@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { AuthGuard } from './core/guards/auth.guard';
 import { SetupGuard } from './core/guards/setup.guard';
+import { LoginSetupGuard } from './core/guards/login-setup.guard';
 import { ScreenPermissionGuard } from './core/guards/screen-permission.guard';
 import { ShellComponent } from './shell/shell.component';
 import { UnauthorizedComponent } from './core/pages/unauthorized.component';
@@ -21,9 +22,11 @@ export const routes: Routes = [
   // Public: Login
   {
     path: 'login',
+    canActivate: [LoginSetupGuard],
     loadComponent: () =>
       import('./features/login/login.component').then(m => m.LoginComponent)
   },
+
 
   // Protected Shell Routes
   {

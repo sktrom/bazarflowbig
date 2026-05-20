@@ -503,6 +503,8 @@ export class SetupComponent implements OnInit {
         if (res.success) {
           // Save the deviceCode in local storage (bazarflow_device_code) via SessionService
           this.sessionService.setDeviceCode(request.deviceCode);
+          // Warm up cache so LoginSetupGuard allows /login without re-checking the API
+          this.setupApi.setCompletedCache(true);
           this.router.navigate(['/login']);
         } else {
           this.apiError = res.message || 'حدث خطأ أثناء إعداد النظام.';

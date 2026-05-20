@@ -16,7 +16,7 @@ describe('SetupComponent', () => {
   let routerSpy: jasmine.SpyObj<Router>;
 
   beforeEach(async () => {
-    setupApiSpy = jasmine.createSpyObj('SetupApiService', ['getStatus', 'complete']);
+    setupApiSpy = jasmine.createSpyObj('SetupApiService', ['getStatus', 'complete', 'setCompletedCache']);
     sessionServiceSpy = jasmine.createSpyObj('SessionService', ['setDeviceCode']);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
 
@@ -159,6 +159,7 @@ describe('SetupComponent', () => {
     });
 
     expect(sessionServiceSpy.setDeviceCode).toHaveBeenCalledWith('DEV-101');
+    expect(setupApiSpy.setCompletedCache).toHaveBeenCalledWith(true);
     expect(routerSpy.navigate).toHaveBeenCalledWith(['/login']);
   });
 
