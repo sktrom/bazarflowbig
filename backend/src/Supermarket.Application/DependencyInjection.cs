@@ -54,6 +54,7 @@ namespace Supermarket.Application
             services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
             services.AddScoped<IDeviceService, DeviceService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
+            services.AddSingleton<ISessionTokenGenerator, SessionTokenGenerator>();
             services.AddSingleton<ILoginThrottleService, LoginThrottleService>();
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<ISessionService, SessionService>();

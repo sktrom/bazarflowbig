@@ -10,7 +10,7 @@ describe('SessionInterceptor', () => {
   let sessionService: jasmine.SpyObj<SessionService>;
 
   beforeEach(() => {
-    const sessionSpy = jasmine.createSpyObj('SessionService', ['getSessionId']);
+    const sessionSpy = jasmine.createSpyObj('SessionService', ['getSessionToken']);
     
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
@@ -29,24 +29,26 @@ describe('SessionInterceptor', () => {
     httpMock.verify();
   });
 
-  it('should inject X-Session-Id header when session exists', () => {
-    sessionService.getSessionId.and.returnValue('mock-session-123');
+  it('should inject X-Session-Token header when session token exists', () => {
+    sessionService.getSessionToken.and.returnValue('mock-token-123');
 
     httpClient.get('/api/test').subscribe();
 
     const req = httpMock.expectOne('/api/test');
-    expect(req.request.headers.has('X-Session-Id')).toBeTrue();
-    expect(req.request.headers.get('X-Session-Id')).toEqual('mock-session-123');
+    expect(req.request.headers.has('X-Session-Token')).toBeTrue();
+    expect(req.request.headers.get('X-Session-Token')).toEqual('mock-token-123');
+    expect(req.request.headers.has('X-Session-Id')).toBeFalse();
     req.flush({});
   });
 
-  it('should not inject X-Session-Id header when session is missing', () => {
-    sessionService.getSessionId.and.returnValue(null);
+  it('should not inject session headers when session token is missing', () => {
+    sessionService.getSessionToken.and.returnValue(null);
 
     httpClient.get('/api/test').subscribe();
 
     const req = httpMock.expectOne('/api/test');
     expect(req.request.headers.has('X-Session-Id')).toBeFalse();
+    expect(req.request.headers.has('X-Session-Token')).toBeFalse();
     req.flush({});
   });
 });
