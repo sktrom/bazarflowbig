@@ -29,11 +29,19 @@ describe('LoginComponent', () => {
   beforeEach(async () => {
     authApiSpy = jasmine.createSpyObj('AuthApiService', ['login']);
     authServiceSpy = jasmine.createSpyObj('AuthService', ['isLoggedIn', 'setAuthenticated']);
-    sessionServiceSpy = jasmine.createSpyObj('SessionService', ['setSessionId', 'setEmployee', 'getSessionId']);
+    sessionServiceSpy = jasmine.createSpyObj('SessionService', [
+      'setSessionId',
+      'setEmployee',
+      'getSessionId',
+      'getDeviceCode',
+      'setDeviceCode',
+      'clearDeviceCode'
+    ]);
     permissionsServiceSpy = jasmine.createSpyObj('PermissionsService', ['setPermissions']);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
 
     authServiceSpy.isLoggedIn.and.returnValue(false);
+    sessionServiceSpy.getDeviceCode.and.returnValue(null);
 
     await TestBed.configureTestingModule({
       imports: [LoginComponent, ReactiveFormsModule],
@@ -141,12 +149,22 @@ describe('LoginComponent', () => {
     expect(component.apiError).toContain('غير صحيحة');
   });
 
-  it('should show device error on 400 DEVICE_NOT_FOUND', () => {
+  it('should show correct error message and change-device link on 400 DEVICE_NOT_FOUND', () => {
     const err = new HttpErrorResponse({ status: 400, error: { error: 'DEVICE_NOT_FOUND' } });
     authApiSpy.login.and.returnValue(throwError(() => err));
     component.loginForm.setValue({ username: 'user1', password: 'pass1' });
     component.onSubmit();
-    expect(component.apiError).toContain('الجهاز');
+    expect(component.apiError).toBe('رمز الجهاز غير معرّف في النظام. يرجى التحقق من صحة الرمز.');
+    expect(component.lastErrorCode).toBe('DEVICE_NOT_FOUND');
+  });
+
+  it('should show correct error message and change-device link on DEVICE_INACTIVE', () => {
+    const err = new HttpErrorResponse({ status: 403, error: { error: 'DEVICE_INACTIVE' } });
+    authApiSpy.login.and.returnValue(throwError(() => err));
+    component.loginForm.setValue({ username: 'user1', password: 'pass1' });
+    component.onSubmit();
+    expect(component.apiError).toBe('هذا الجهاز معطّل، يرجى مراجعة مدير النظام لتفعيله.');
+    expect(component.lastErrorCode).toBe('DEVICE_INACTIVE');
   });
 
   it('should show active session error on 409', () => {
@@ -179,5 +197,63 @@ describe('LoginComponent', () => {
     authServiceSpy.isLoggedIn.and.returnValue(true);
     component.ngOnInit();
     expect(routerSpy.navigate).toHaveBeenCalledWith(['/cashier']);
+  });
+
+  // --- v0.4 Phase 03C - Device Code tests ---
+
+  it('should use deviceCode from sessionService if it exists', () => {
+    sessionServiceSpy.getDeviceCode.and.returnValue('CUSTOM-DEVICE');
+    authApiSpy.login.and.returnValue(of(mockSuccessResponse));
+    component.loginForm.get('username')?.setValue('user1');
+    component.loginForm.get('password')?.setValue('pass1');
+    component.onSubmit();
+    expect(authApiSpy.login).toHaveBeenCalledWith(
+      jasmine.objectContaining({ deviceCode: 'CUSTOM-DEVICE' })
+    );
+  });
+
+  it('should fall back to DEFAULT_DEVICE if sessionService has no deviceCode', () => {
+    sessionServiceSpy.getDeviceCode.and.returnValue(null);
+    authApiSpy.login.and.returnValue(of(mockSuccessResponse));
+    component.loginForm.get('username')?.setValue('user1');
+    component.loginForm.get('password')?.setValue('pass1');
+    component.onSubmit();
+    expect(authApiSpy.login).toHaveBeenCalledWith(
+      jasmine.objectContaining({ deviceCode: 'DEFAULT_DEVICE' })
+    );
+  });
+
+  it('should store new device code via sessionService on save', () => {
+    component.saveDeviceCode('  NEW-DEVICE-123  ');
+    expect(sessionServiceSpy.setDeviceCode).toHaveBeenCalledWith('NEW-DEVICE-123');
+  });
+
+  it('should not store empty device code on save', () => {
+    component.saveDeviceCode('   ');
+    expect(sessionServiceSpy.setDeviceCode).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionService', () => {
+  let service: SessionService;
+
+  beforeEach(() => {
+    service = new SessionService();
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('should store and retrieve device code', () => {
+    service.setDeviceCode('TEST-DEV');
+    expect(service.getDeviceCode()).toBe('TEST-DEV');
+  });
+
+  it('should not clear device code when clearSession is called', () => {
+    service.setDeviceCode('TEST-DEV');
+    service.clearSession();
+    expect(service.getDeviceCode()).toBe('TEST-DEV');
   });
 });

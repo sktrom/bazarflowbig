@@ -12,6 +12,7 @@ export class SessionService {
   private readonly EMPLOYEE_KEY = 'session_employee';
 
   private readonly PERMISSIONS_KEY = 'session_permissions';
+  private readonly DEVICE_CODE_KEY = 'bazarflow_device_code';
 
   // sessionId is numeric (long) from backend — stored as string representation
   setSessionId(sessionId: number): void {
@@ -42,9 +43,22 @@ export class SessionService {
     try { return JSON.parse(raw) as string[]; } catch { return []; }
   }
 
+  setDeviceCode(code: string): void {
+    localStorage.setItem(this.DEVICE_CODE_KEY, code);
+  }
+
+  getDeviceCode(): string | null {
+    return localStorage.getItem(this.DEVICE_CODE_KEY);
+  }
+
+  clearDeviceCode(): void {
+    localStorage.removeItem(this.DEVICE_CODE_KEY);
+  }
+
   clearSession(): void {
     localStorage.removeItem(this.SESSION_KEY);
     localStorage.removeItem(this.EMPLOYEE_KEY);
     localStorage.removeItem(this.PERMISSIONS_KEY);
   }
 }
+

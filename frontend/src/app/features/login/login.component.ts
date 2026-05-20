@@ -73,7 +73,16 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
               class="mb-5 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700 text-center"
               role="alert"
             >
-              {{ apiError }}
+              <div>{{ apiError }}</div>
+              <div *ngIf="lastErrorCode === 'DEVICE_NOT_FOUND' || lastErrorCode === 'DEVICE_INACTIVE'" class="mt-2 text-center">
+                <button
+                  type="button"
+                  (click)="openDeviceModal()"
+                  class="text-xs font-semibold text-red-700 hover:text-red-900 underline"
+                >
+                  تغيير رمز الجهاز الآن
+                </button>
+              </div>
             </div>
 
             <!-- Submit Button -->
@@ -91,8 +100,71 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
             </button>
 
           </form>
+
+          <!-- Device Info -->
+          <div class="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div>
+              <span>الجهاز الحالي: </span>
+              <span class="font-semibold text-slate-700">{{ deviceCode }}</span>
+              <span *ngIf="deviceCode === 'DEFAULT_DEVICE'"> (افتراضي)</span>
+            </div>
+            <button
+              type="button"
+              (click)="openDeviceModal()"
+              class="text-primary hover:underline font-semibold"
+            >
+              تغيير الجهاز
+            </button>
+          </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- Device Selection Modal -->
+    <div
+      *ngIf="showDeviceModal"
+      class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="bg-white rounded-lg shadow-xl max-w-sm w-full p-6 relative">
+        <h3 class="text-lg font-bold text-slate-800 mb-4">تغيير رمز الجهاز</h3>
+        <p class="text-xs text-slate-500 mb-4 leading-relaxed">
+          أدخل رمز الجهاز الجديد الذي ترغب في ربطه بجلسة العمل الحالية.
+        </p>
+        
+        <div class="mb-6">
+          <label for="deviceCodeInput" class="block text-xs font-semibold text-slate-600 mb-2">
+            رمز الجهاز
+          </label>
+          <input
+            id="deviceCodeInput"
+            #deviceInput
+            type="text"
+            [value]="deviceCode === 'DEFAULT_DEVICE' ? '' : deviceCode"
+            class="input-field w-full"
+            placeholder="مثال: DEV-102"
+            autocomplete="off"
+          />
+        </div>
+
+        <div class="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            (click)="showDeviceModal = false"
+            class="btn-secondary"
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            (click)="saveDeviceCode(deviceInput.value)"
+            class="btn-primary"
+          >
+            حفظ الرمز
+          </button>
+        </div>
       </div>
     </div>
   `
@@ -101,9 +173,12 @@ export class LoginComponent implements OnInit {
   loginForm!: FormGroup;
   isLoading = false;
   apiError: string | null = null;
+  showDeviceModal = false;
+  lastErrorCode: string | null = null;
 
-  // deviceCode is read from stored session/device config, not user input
-  private readonly deviceCode: string = 'DEFAULT_DEVICE';
+  get deviceCode(): string {
+    return this.sessionService.getDeviceCode() || 'DEFAULT_DEVICE';
+  }
 
   constructor(
     private fb: FormBuilder,
@@ -128,7 +203,10 @@ export class LoginComponent implements OnInit {
 
     // Clear API error on any change
     this.loginForm.valueChanges.subscribe(() => {
-      if (this.apiError) this.apiError = null;
+      if (this.apiError) {
+        this.apiError = null;
+        this.lastErrorCode = null;
+      }
     });
   }
 
@@ -178,20 +256,38 @@ export class LoginComponent implements OnInit {
       },
       error: (err: HttpErrorResponse) => {
         this.isLoading = false;
+        this.lastErrorCode = err.error?.error as string | null;
         this.apiError = this.mapApiError(err);
       }
     });
   }
 
+  openDeviceModal(): void {
+    this.showDeviceModal = true;
+  }
+
+  saveDeviceCode(code: string): void {
+    const trimmed = code.trim();
+    if (trimmed) {
+      this.sessionService.setDeviceCode(trimmed);
+    }
+    this.showDeviceModal = false;
+  }
+
   private mapApiError(err: HttpErrorResponse): string {
     const errorCode = err.error?.error as string | undefined;
+
+    if (errorCode === 'DEVICE_NOT_FOUND') {
+      return 'رمز الجهاز غير معرّف في النظام. يرجى التحقق من صحة الرمز.';
+    }
+
+    if (errorCode === 'DEVICE_INACTIVE') {
+      return 'هذا الجهاز معطّل، يرجى مراجعة مدير النظام لتفعيله.';
+    }
 
     if (err.status === 400) {
       if (errorCode === 'INVALID_CREDENTIALS' || errorCode === 'EMPLOYEE_NOT_FOUND') {
         return 'اسم المستخدم أو كلمة المرور غير صحيحة';
-      }
-      if (errorCode === 'DEVICE_NOT_FOUND') {
-        return 'الجهاز غير معرّف في النظام';
       }
       return 'اسم المستخدم أو كلمة المرور غير صحيحة';
     }
