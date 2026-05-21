@@ -324,6 +324,13 @@ describe('LoginComponent', () => {
     const alert = fixture.nativeElement.querySelector('#session-expired-alert');
     expect(alert).toBeNull();
   });
+
+  it('should display developer attribution text', () => {
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('Ayaz Murad');
+    expect(compiled.textContent).toContain('أياز مراد');
+  });
 });
 
 describe('SessionService', () => {

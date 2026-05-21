@@ -134,12 +134,22 @@ function mapErr(e: HttpErrorResponse): string {
       </div>
 
       <!-- STORE TAB -->
-      <div *ngIf="activeTab==='store'">
+      <div *ngIf="activeTab==='store'" class="space-y-6">
         <div class="max-w-md bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
           <h2 class="font-bold text-slate-700">معلومات المتجر</h2>
           <div><span class="text-xs text-slate-500 block mb-1">اسم المتجر</span><p class="font-medium text-slate-800">{{storeSettings?.storeName||'—'}}</p></div>
           <div><span class="text-xs text-slate-500 block mb-1">سعر الصرف</span><p class="font-medium text-slate-800">1 USD = {{storeSettings?.exchangeRate||0}} SYP</p></div>
           <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-800 text-sm">⚠️ تعديل اسم المتجر وسعر الصرف غير متاح في هذه النسخة.</div>
+        </div>
+
+        <div class="max-w-md bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4 flex flex-col items-center text-center">
+          <img src="assets/brand/bazarflow-icon.png" alt="BazarFlow Logo" class="h-16 w-16 mb-2 object-contain" />
+          <h2 class="font-bold text-slate-800 text-lg">BazarFlow</h2>
+          <div class="w-full border-t border-slate-100 my-2"></div>
+          <div class="text-sm text-slate-600 space-y-1">
+            <div class="font-medium">المهندس: أياز مراد</div>
+            <div class="font-sans text-xs text-slate-500">Engineer / Developer: Ayaz Murad</div>
+          </div>
         </div>
       </div>
 

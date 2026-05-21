@@ -18,7 +18,8 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
       <div class="w-full max-w-md">
 
         <!-- App Title -->
-        <div class="text-center mb-8">
+        <div class="text-center mb-8 flex flex-col items-center justify-center">
+          <img src="assets/brand/bazarflow-icon.png" alt="BazarFlow Logo" class="h-16 w-16 mb-2 object-contain" />
           <h1 class="text-3xl font-bold text-primary tracking-tight">Bazarflow</h1>
           <p class="text-slate-500 mt-1 text-sm">نظام إدارة نقطة البيع</p>
         </div>
@@ -127,6 +128,12 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
               تغيير الجهاز
             </button>
           </div>
+        </div>
+
+        <!-- Developer Attribution -->
+        <div class="text-center mt-6 text-xs text-slate-400 font-medium">
+          <div>المهندس: أياز مراد</div>
+          <div class="mt-0.5 tracking-wide">Engineer / Developer: Ayaz Murad</div>
         </div>
 
       </div>

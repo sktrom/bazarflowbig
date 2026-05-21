@@ -97,6 +97,14 @@ describe('SettingsComponent', () => {
     expect(component.storeSettings?.exchangeRate).toBe(15000);
   });
 
+  it('should display developer attribution on store tab', () => {
+    component.switchTab('store');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('أياز مراد');
+    expect(compiled.textContent).toContain('Ayaz Murad');
+  });
+
   it('should render backup tab', () => {
     component.switchTab('backup');
     fixture.detectChanges();

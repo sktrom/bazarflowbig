@@ -213,4 +213,11 @@ describe('SetupComponent', () => {
       expect(component.apiError).toBe(errors[errCode]);
     });
   });
+
+  it('should display developer attribution text', () => {
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('أياز مراد');
+    expect(compiled.textContent).toContain('Ayaz Murad');
+  });
 });
