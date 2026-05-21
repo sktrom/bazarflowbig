@@ -68,7 +68,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseCors(CorsPolicyName);
 
 // Passive session middleware — populates ISessionContext, never short-circuits
