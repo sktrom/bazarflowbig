@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Moq;
 using Supermarket.Application.AuditLogs.Interfaces;
@@ -71,6 +72,22 @@ namespace Supermarket.UnitTests.PurchaseInvoices
         }
 
         [Fact]
+        public async Task CreateAsync_ShouldRecordPurchaseCreate()
+        {
+            SetupCreateDraftInvoice();
+
+            await _service.CreateAsync(new CreatePurchaseInvoiceRequest { SupplierId = 1 });
+
+            VerifyAudit("PURCHASE_CREATE", metadata =>
+                JsonContains(metadata, "\"purchaseInvoiceId\":10") &&
+                JsonContains(metadata, "\"InvoiceNumber\":\"PI-20260519-000001\"") &&
+                JsonContains(metadata, "\"SupplierId\":1") &&
+                JsonContains(metadata, "\"Status\":\"Draft\"") &&
+                JsonContains(metadata, "\"TotalUsd\":0") &&
+                JsonContains(metadata, "\"lineCount\":0"));
+        }
+
+        [Fact]
         public async Task CreateAsync_ShouldRejectMissingSupplier()
         {
             _repoMock.Setup(r => r.GetSupplierAsync(99)).ReturnsAsync((Supplier?)null);
@@ -114,6 +131,25 @@ namespace Supermarket.UnitTests.PurchaseInvoices
         }
 
         [Fact]
+        public async Task UpdateAsync_ShouldRecordPurchaseUpdate()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.TotalUsd = 6m;
+            _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(invoice);
+            _repoMock.Setup(r => r.GetSupplierAsync(2)).ReturnsAsync(new Supplier { Id = 2, Name = "New", IsActive = true });
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(invoice);
+
+            await _service.UpdateAsync(10, new UpdatePurchaseInvoiceRequest { SupplierId = 2 });
+
+            VerifyAudit("PURCHASE_UPDATE", metadata =>
+                JsonContains(metadata, "\"purchaseInvoiceId\":10") &&
+                JsonContains(metadata, "\"SupplierId\":2") &&
+                JsonContains(metadata, "\"Status\":\"Draft\"") &&
+                JsonContains(metadata, "\"TotalUsd\":6") &&
+                JsonContains(metadata, "\"lineCount\":1"));
+        }
+
+        [Fact]
         public async Task UpdateAsync_ShouldRejectNonDraftInvoice()
         {
             var invoice = DraftInvoice();
@@ -137,6 +173,24 @@ namespace Supermarket.UnitTests.PurchaseInvoices
             Assert.Equal("DELETED", result.Action);
             _repoMock.Verify(r => r.DeleteLinesAsync(10), Times.Once);
             _repoMock.Verify(r => r.DeleteAsync(invoice), Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteAsync_ShouldRecordPurchaseDelete()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.TotalUsd = 6m;
+            _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(invoice);
+
+            await _service.DeleteAsync(10);
+
+            VerifyAudit("PURCHASE_DELETE", metadata =>
+                JsonContains(metadata, "\"purchaseInvoiceId\":10") &&
+                JsonContains(metadata, "\"InvoiceNumber\":\"PI-20260519-000001\"") &&
+                JsonContains(metadata, "\"SupplierId\":1") &&
+                JsonContains(metadata, "\"status\":\"Draft\"") &&
+                JsonContains(metadata, "\"TotalUsd\":6") &&
+                JsonContains(metadata, "\"lineCount\":1"));
         }
 
         [Fact]
@@ -168,6 +222,33 @@ namespace Supermarket.UnitTests.PurchaseInvoices
         }
 
         [Fact]
+        public async Task AddLineAsync_ShouldRecordPurchaseLineCreate()
+        {
+            var invoiceAfter = DraftInvoiceWithLine();
+            invoiceAfter.TotalUsd = 6m;
+            _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(DraftInvoice());
+            _repoMock.Setup(r => r.GetProductAsync(5)).ReturnsAsync(ActiveProduct(hasExpiry: true));
+            _repoMock.Setup(r => r.GetNextLineSortOrderAsync(10)).ReturnsAsync(1);
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(invoiceAfter);
+
+            await _service.AddLineAsync(10, new CreatePurchaseInvoiceLineRequest
+            {
+                ProductId = 5,
+                Quantity = 3,
+                UnitCostUsd = 2,
+                ExpiryDate = DateTime.UtcNow.Date.AddDays(30)
+            });
+
+            VerifyAudit("PURCHASE_LINE_CREATE", metadata =>
+                JsonContains(metadata, "\"purchaseInvoiceId\":10") &&
+                JsonContains(metadata, "\"productId\":5") &&
+                JsonContains(metadata, "\"quantity\":3") &&
+                JsonContains(metadata, "\"unitCostUsd\":2") &&
+                JsonContains(metadata, "\"lineCount\":1") &&
+                JsonContains(metadata, "\"TotalUsd\":6"));
+        }
+
+        [Fact]
         public async Task UpdateLineAsync_ShouldUpdateLineAndRecalculateTotals()
         {
             var line = new PurchaseInvoiceLine
@@ -196,17 +277,70 @@ namespace Supermarket.UnitTests.PurchaseInvoices
         }
 
         [Fact]
+        public async Task UpdateLineAsync_ShouldRecordPurchaseLineUpdate()
+        {
+            var line = new PurchaseInvoiceLine
+            {
+                Id = 7,
+                PurchaseInvoiceId = 10,
+                ProductId = 5,
+                Product = ActiveProduct(hasExpiry: true)
+            };
+            var invoiceAfter = DraftInvoiceWithLine();
+            invoiceAfter.TotalUsd = 6m;
+            _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(DraftInvoice());
+            _repoMock.Setup(r => r.GetLineAsync(10, 7)).ReturnsAsync(line);
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(invoiceAfter);
+
+            await _service.UpdateLineAsync(10, 7, new UpdatePurchaseInvoiceLineRequest
+            {
+                Quantity = 4,
+                UnitCostUsd = 1.5m,
+                ExpiryDate = DateTime.UtcNow.Date.AddDays(30)
+            });
+
+            VerifyAudit("PURCHASE_LINE_UPDATE", metadata =>
+                JsonContains(metadata, "\"purchaseInvoiceId\":10") &&
+                JsonContains(metadata, "\"productId\":5") &&
+                JsonContains(metadata, "\"quantity\":4") &&
+                JsonContains(metadata, "\"unitCostUsd\":1.5") &&
+                JsonContains(metadata, "\"lineCount\":1") &&
+                JsonContains(metadata, "\"TotalUsd\":6"));
+        }
+
+        [Fact]
         public async Task DeleteLineAsync_ShouldDeleteLineAndRecalculateTotals()
         {
             var line = new PurchaseInvoiceLine { Id = 7, PurchaseInvoiceId = 10 };
             _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(DraftInvoice());
             _repoMock.Setup(r => r.GetLineAsync(10, 7)).ReturnsAsync(line);
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(DraftInvoice());
 
             var result = await _service.DeleteLineAsync(10, 7);
 
             Assert.True(result.Success);
             _repoMock.Verify(r => r.DeleteLineAsync(line), Times.Once);
             _repoMock.Verify(r => r.RecalculateTotalsAsync(10), Times.Once);
+        }
+
+        [Fact]
+        public async Task DeleteLineAsync_ShouldRecordPurchaseLineDelete()
+        {
+            var line = new PurchaseInvoiceLine { Id = 7, PurchaseInvoiceId = 10, ProductId = 5 };
+            var invoiceAfter = DraftInvoice();
+            invoiceAfter.TotalUsd = 0m;
+            _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(DraftInvoice());
+            _repoMock.Setup(r => r.GetLineAsync(10, 7)).ReturnsAsync(line);
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(invoiceAfter);
+
+            await _service.DeleteLineAsync(10, 7);
+
+            VerifyAudit("PURCHASE_LINE_DELETE", metadata =>
+                JsonContains(metadata, "\"purchaseInvoiceId\":10") &&
+                JsonContains(metadata, "\"productId\":5") &&
+                JsonContains(metadata, "\"lineId\":7") &&
+                JsonContains(metadata, "\"lineCount\":0") &&
+                JsonContains(metadata, "\"TotalUsd\":0"));
         }
 
         [Theory]
@@ -340,6 +474,66 @@ namespace Supermarket.UnitTests.PurchaseInvoices
                 null,
                 null,
                 It.IsAny<object>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldNotDuplicateCompletePurchaseAudit()
+        {
+            var invoice = DraftInvoiceWithLine();
+            _repoMock.Setup(r => r.GetByIdWithDetailsForCompletionAsync(10)).ReturnsAsync(invoice);
+            _repoMock.Setup(r => r.HasAnyBatchForPurchaseInvoiceLinesAsync(It.IsAny<IEnumerable<long>>())).ReturnsAsync(false);
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(invoice);
+
+            await _service.CompleteAsync(10);
+
+            _auditLogMock.Verify(a => a.RecordAsync(
+                "COMPLETE_PURCHASE",
+                "PurchaseInvoice",
+                "10",
+                "PI-20260519-000001",
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
+            VerifyAuditNever("PURCHASE_CREATE");
+            VerifyAuditNever("PURCHASE_UPDATE");
+            VerifyAuditNever("PURCHASE_DELETE");
+            VerifyAuditNever("PURCHASE_LINE_CREATE");
+            VerifyAuditNever("PURCHASE_LINE_UPDATE");
+            VerifyAuditNever("PURCHASE_LINE_DELETE");
+        }
+
+        [Fact]
+        public async Task PurchaseOperation_ShouldSucceed_WhenAuditThrows()
+        {
+            SetupCreateDraftInvoice();
+            _auditLogMock
+                .Setup(a => a.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<object?>(), It.IsAny<object?>(), It.IsAny<object?>()))
+                .ThrowsAsync(new Exception("audit failed"));
+
+            var result = await _service.CreateAsync(new CreatePurchaseInvoiceRequest { SupplierId = 1 });
+
+            Assert.Equal(10, result.Id);
+        }
+
+        [Fact]
+        public async Task AuditMetadata_ShouldNotContainFullLinesCollection()
+        {
+            var invoice = DraftInvoiceWithLine();
+            invoice.TotalUsd = 6m;
+            _repoMock.Setup(r => r.GetByIdForUpdateAsync(10)).ReturnsAsync(invoice);
+            _repoMock.Setup(r => r.GetSupplierAsync(2)).ReturnsAsync(new Supplier { Id = 2, Name = "New", IsActive = true });
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync(invoice);
+            object? metadata = null;
+            _auditLogMock
+                .Setup(a => a.RecordAsync("PURCHASE_UPDATE", "PurchaseInvoice", "10", "PI-20260519-000001", null, null, It.IsAny<object?>()))
+                .Callback<string, string, string?, string?, object?, object?, object?>((_, _, _, _, _, _, capturedMetadata) => metadata = capturedMetadata);
+
+            await _service.UpdateAsync(10, new UpdatePurchaseInvoiceRequest { SupplierId = 2 });
+
+            var serialized = JsonSerializer.Serialize(metadata);
+            Assert.DoesNotContain("Lines", serialized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("ProductName", serialized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Barcode", serialized, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -490,5 +684,47 @@ namespace Supermarket.UnitTests.PurchaseInvoices
             };
             return invoice;
         }
+
+        private void SetupCreateDraftInvoice()
+        {
+            var supplier = ActiveSupplier();
+            _repoMock.Setup(r => r.GetSupplierAsync(1)).ReturnsAsync(supplier);
+            _repoMock.Setup(r => r.GetInvoiceCountForDateAsync(It.IsAny<DateTime>())).ReturnsAsync(0);
+            _repoMock.Setup(r => r.CreateAsync(It.IsAny<PurchaseInvoice>())).ReturnsAsync((PurchaseInvoice invoice) =>
+            {
+                invoice.Id = 10;
+                invoice.Supplier = supplier;
+                invoice.CreatedByEmployee = new Employee { Id = 42, FullName = "Cashier" };
+                return invoice;
+            });
+            _repoMock.Setup(r => r.GetByIdWithDetailsAsync(10)).ReturnsAsync((long _) => DraftInvoice());
+        }
+
+        private void VerifyAudit(string action, Func<object, bool> metadata)
+        {
+            _auditLogMock.Verify(a => a.RecordAsync(
+                action,
+                "PurchaseInvoice",
+                "10",
+                "PI-20260519-000001",
+                null,
+                null,
+                It.Is<object>(value => metadata(value))), Times.Once);
+        }
+
+        private void VerifyAuditNever(string action)
+        {
+            _auditLogMock.Verify(a => a.RecordAsync(
+                action,
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<object?>(),
+                It.IsAny<object?>(),
+                It.IsAny<object?>()), Times.Never);
+        }
+
+        private static bool JsonContains(object value, string expected)
+            => JsonSerializer.Serialize(value).Contains(expected, StringComparison.OrdinalIgnoreCase);
     }
 }

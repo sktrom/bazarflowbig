@@ -83,7 +83,9 @@ namespace Supermarket.Application.PurchaseInvoices.Services
             };
 
             var created = await _repository.CreateAsync(invoice);
-            return await GetByIdAsync(created.Id);
+            var detail = await GetByIdAsync(created.Id);
+            await RecordAuditAsync("PURCHASE_CREATE", detail);
+            return detail;
         }
 
         public async Task<PurchaseInvoiceDetailResponse> UpdateAsync(long id, UpdatePurchaseInvoiceRequest request)
@@ -97,18 +99,28 @@ namespace Supermarket.Application.PurchaseInvoices.Services
             invoice.UpdatedAt = DateTime.UtcNow;
 
             await _repository.UpdateAsync(invoice);
-            return await GetByIdAsync(id);
+            var detail = await GetByIdAsync(id);
+            await RecordAuditAsync("PURCHASE_UPDATE", detail);
+            return detail;
         }
 
         public async Task<DeletePurchaseInvoiceResponse> DeleteAsync(long id)
         {
             var invoice = await RequireInvoiceForUpdateAsync(id);
+            var deleteMetadata = PurchaseMetadata(invoice, invoice.Lines?.Count ?? 0);
 
             await _repository.ExecuteInTransactionAsync(async () =>
             {
                 await _repository.DeleteLinesAsync(invoice.Id);
                 await _repository.DeleteAsync(invoice);
             });
+
+            await RecordAuditAsync(
+                "PURCHASE_DELETE",
+                "PurchaseInvoice",
+                invoice.Id.ToString(),
+                invoice.InvoiceNumber,
+                deleteMetadata);
 
             return new DeletePurchaseInvoiceResponse
             {
@@ -143,7 +155,14 @@ namespace Supermarket.Application.PurchaseInvoices.Services
                 await _repository.RecalculateTotalsAsync(invoiceId);
             });
 
-            return await GetByIdAsync(invoiceId);
+            var detail = await GetByIdAsync(invoiceId);
+            await RecordAuditAsync(
+                "PURCHASE_LINE_CREATE",
+                "PurchaseInvoice",
+                detail.Id.ToString(),
+                detail.InvoiceNumber,
+                PurchaseLineMetadata(detail, request.ProductId, request.Quantity, request.UnitCostUsd));
+            return detail;
         }
 
         public async Task<PurchaseInvoiceDetailResponse> UpdateLineAsync(long invoiceId, long lineId, UpdatePurchaseInvoiceLineRequest request)
@@ -166,7 +185,14 @@ namespace Supermarket.Application.PurchaseInvoices.Services
                 await _repository.RecalculateTotalsAsync(invoiceId);
             });
 
-            return await GetByIdAsync(invoiceId);
+            var detail = await GetByIdAsync(invoiceId);
+            await RecordAuditAsync(
+                "PURCHASE_LINE_UPDATE",
+                "PurchaseInvoice",
+                detail.Id.ToString(),
+                detail.InvoiceNumber,
+                PurchaseLineMetadata(detail, line.ProductId, request.Quantity, request.UnitCostUsd));
+            return detail;
         }
 
         public async Task<DeletePurchaseInvoiceLineResponse> DeleteLineAsync(long invoiceId, long lineId)
@@ -175,11 +201,30 @@ namespace Supermarket.Application.PurchaseInvoices.Services
             var line = await _repository.GetLineAsync(invoiceId, lineId);
             if (line == null) throw new InvalidOperationException("PURCHASE_INVOICE_LINE_NOT_FOUND");
 
+            var deletedLineId = line.Id;
+            var deletedProductId = line.ProductId;
+
             await _repository.ExecuteInTransactionAsync(async () =>
             {
                 await _repository.DeleteLineAsync(line);
                 await _repository.RecalculateTotalsAsync(invoiceId);
             });
+
+            var detail = await GetByIdAsync(invoiceId);
+            await RecordAuditAsync(
+                "PURCHASE_LINE_DELETE",
+                "PurchaseInvoice",
+                detail.Id.ToString(),
+                detail.InvoiceNumber,
+                new
+                {
+                    purchaseInvoiceId = detail.Id,
+                    detail.InvoiceNumber,
+                    productId = deletedProductId,
+                    lineId = deletedLineId,
+                    lineCount = detail.Lines.Count,
+                    detail.TotalUsd
+                });
 
             return new DeletePurchaseInvoiceLineResponse
             {
@@ -326,6 +371,76 @@ namespace Supermarket.Application.PurchaseInvoices.Services
         {
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
+
+        private async Task RecordAuditAsync(string action, PurchaseInvoiceDetailResponse invoice)
+        {
+            await RecordAuditAsync(
+                action,
+                "PurchaseInvoice",
+                invoice.Id.ToString(),
+                invoice.InvoiceNumber,
+                PurchaseMetadata(invoice));
+        }
+
+        private async Task RecordAuditAsync(
+            string action,
+            string entityType,
+            string entityId,
+            string entityDisplayName,
+            object metadata)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    entityType,
+                    entityId,
+                    entityDisplayName,
+                    metadata: metadata);
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break purchase operations.
+            }
+        }
+
+        private static object PurchaseMetadata(PurchaseInvoiceDetailResponse invoice)
+            => new
+            {
+                purchaseInvoiceId = invoice.Id,
+                invoice.InvoiceNumber,
+                invoice.SupplierId,
+                invoice.Status,
+                invoice.TotalUsd,
+                lineCount = invoice.Lines.Count
+            };
+
+        private static object PurchaseMetadata(PurchaseInvoice invoice, int lineCount)
+            => new
+            {
+                purchaseInvoiceId = invoice.Id,
+                invoice.InvoiceNumber,
+                invoice.SupplierId,
+                status = invoice.Status.ToString(),
+                invoice.TotalUsd,
+                lineCount
+            };
+
+        private static object PurchaseLineMetadata(
+            PurchaseInvoiceDetailResponse invoice,
+            long productId,
+            decimal quantity,
+            decimal unitCostUsd)
+            => new
+            {
+                purchaseInvoiceId = invoice.Id,
+                invoice.InvoiceNumber,
+                productId,
+                quantity,
+                unitCostUsd,
+                lineCount = invoice.Lines.Count,
+                invoice.TotalUsd
+            };
 
         private static PurchaseInvoiceDetailResponse MapToDetail(PurchaseInvoice invoice)
         {
