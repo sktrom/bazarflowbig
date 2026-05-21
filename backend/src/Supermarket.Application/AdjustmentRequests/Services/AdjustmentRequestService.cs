@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Supermarket.Application.AdjustmentRequests.Interfaces;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Contracts.AdjustmentRequests;
 using Supermarket.Domain.Entities;
@@ -14,11 +15,16 @@ namespace Supermarket.Application.AdjustmentRequests.Services
     {
         private readonly IAdjustmentRequestRepository _repository;
         private readonly ISessionContext _sessionContext;
+        private readonly IAuditLogService _auditLogService;
 
-        public AdjustmentRequestService(IAdjustmentRequestRepository repository, ISessionContext sessionContext)
+        public AdjustmentRequestService(
+            IAdjustmentRequestRepository repository,
+            ISessionContext sessionContext,
+            IAuditLogService auditLogService)
         {
             _repository = repository;
             _sessionContext = sessionContext;
+            _auditLogService = auditLogService;
         }
 
         public async Task<AdjustmentRequestResponseDto> CreateAdjustmentRequestAsync(long invoiceId, CreateAdjustmentRequestDto requestDto)
@@ -95,6 +101,8 @@ namespace Supermarket.Application.AdjustmentRequests.Services
                 var createdRequest = await _repository.CreateRequestAsync(request, lines);
 
                 await _repository.CommitTransactionAsync();
+
+                await RecordAuditAsync("CREATE_ADJUSTMENT", createdRequest);
                 
                 return MapToDto(createdRequest, lines);
             }
@@ -192,6 +200,8 @@ namespace Supermarket.Application.AdjustmentRequests.Services
                 await _repository.UpdateInvoiceAsync(invoice);
 
                 await _repository.CommitTransactionAsync();
+
+                await RecordAuditAsync("APPROVE_ADJUSTMENT", request);
                 
                 return MapToDto(request, lines);
             }
@@ -222,6 +232,8 @@ namespace Supermarket.Application.AdjustmentRequests.Services
 
                 await _repository.CommitTransactionAsync();
 
+                await RecordAuditAsync("REJECT_ADJUSTMENT", request);
+
                 return MapToDto(request, lines);
             }
             catch
@@ -238,6 +250,48 @@ namespace Supermarket.Application.AdjustmentRequests.Services
 
             var lines = await _repository.GetRequestLinesAsync(requestId);
             return MapToDto(request, lines);
+        }
+
+        private async Task RecordAuditAsync(string action, AdjustmentRequest request)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    "AdjustmentRequest",
+                    request.Id.ToString(),
+                    request.RequestType.ToString(),
+                    metadata: AdjustmentMetadata(action, request));
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break adjustment operations.
+            }
+        }
+
+        private static object AdjustmentMetadata(string action, AdjustmentRequest request)
+        {
+            if (action == "CREATE_ADJUSTMENT")
+            {
+                return new
+                {
+                    adjustmentRequestId = request.Id,
+                    request.InvoiceId,
+                    requestType = request.RequestType.ToString(),
+                    status = request.Status.ToString(),
+                    request.RequestedByEmployeeId
+                };
+            }
+
+            return new
+            {
+                adjustmentRequestId = request.Id,
+                request.InvoiceId,
+                requestType = request.RequestType.ToString(),
+                status = request.Status.ToString(),
+                request.RequestedByEmployeeId,
+                request.ReviewedByEmployeeId
+            };
         }
 
         private AdjustmentRequestResponseDto MapToDto(AdjustmentRequest request, List<AdjustmentRequestLine> lines)
