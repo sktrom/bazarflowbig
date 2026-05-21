@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Suppliers.Interfaces;
 using Supermarket.Contracts.Suppliers;
 using Supermarket.Domain.Entities;
@@ -10,10 +11,12 @@ namespace Supermarket.Application.Suppliers.Services
     public class SupplierService : ISupplierService
     {
         private readonly ISupplierRepository _repository;
+        private readonly IAuditLogService _auditLogService;
 
-        public SupplierService(ISupplierRepository repository)
+        public SupplierService(ISupplierRepository repository, IAuditLogService auditLogService)
         {
             _repository = repository;
+            _auditLogService = auditLogService;
         }
 
         public async Task<SupplierListResponse> GetAllAsync()
@@ -64,6 +67,7 @@ namespace Supermarket.Application.Suppliers.Services
             };
 
             var created = await _repository.CreateAsync(supplier);
+            await RecordAuditAsync("SUPPLIER_CREATE", created);
             return MapToDetailResponse(created);
         }
 
@@ -86,6 +90,7 @@ namespace Supermarket.Application.Suppliers.Services
             supplier.UpdatedAt = DateTime.UtcNow;
 
             await _repository.UpdateAsync(supplier);
+            await RecordAuditAsync("SUPPLIER_UPDATE", supplier);
             return MapToDetailResponse(supplier);
         }
 
@@ -99,6 +104,7 @@ namespace Supermarket.Application.Suppliers.Services
                 supplier.IsActive = false;
                 supplier.UpdatedAt = DateTime.UtcNow;
                 await _repository.UpdateAsync(supplier);
+                await RecordAuditAsync("SUPPLIER_DEACTIVATE", supplier);
 
                 return new DeleteSupplierResponse
                 {
@@ -109,6 +115,7 @@ namespace Supermarket.Application.Suppliers.Services
             }
 
             await _repository.DeleteAsync(supplier);
+            await RecordAuditAsync("SUPPLIER_DELETE", supplier);
 
             return new DeleteSupplierResponse
             {
@@ -145,6 +152,29 @@ namespace Supermarket.Application.Suppliers.Services
                 CreatedAt = supplier.CreatedAt,
                 UpdatedAt = supplier.UpdatedAt
             };
+        }
+
+        private async Task RecordAuditAsync(string action, Supplier supplier)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    "Supplier",
+                    supplier.Id.ToString(),
+                    supplier.Name,
+                    metadata: new
+                    {
+                        supplierId = supplier.Id,
+                        supplier.Name,
+                        supplier.Phone,
+                        supplier.IsActive
+                    });
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break supplier operations.
+            }
         }
     }
 }

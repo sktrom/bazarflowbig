@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Moq;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Categories.Interfaces;
 using Supermarket.Application.Categories.Services;
 using Supermarket.Contracts.Categories;
@@ -14,12 +15,14 @@ namespace Supermarket.UnitTests.Categories
     public class CategoryServiceTests
     {
         private readonly Mock<ICategoryRepository> _repoMock;
+        private readonly Mock<IAuditLogService> _auditLogMock;
         private readonly CategoryService _service;
 
         public CategoryServiceTests()
         {
             _repoMock = new Mock<ICategoryRepository>();
-            _service = new CategoryService(_repoMock.Object);
+            _auditLogMock = new Mock<IAuditLogService>();
+            _service = new CategoryService(_repoMock.Object, _auditLogMock.Object);
         }
 
         [Fact]
@@ -38,6 +41,7 @@ namespace Supermarket.UnitTests.Categories
             Assert.Equal("Test", result.Name);
             Assert.True(result.IsActive);
             _repoMock.Verify(r => r.CreateAsync(It.Is<Category>(c => c.Name == "Test")), Times.Once);
+            VerifyAudit("CATEGORY_CREATE", "1", "Test");
         }
 
         [Fact]
@@ -64,6 +68,7 @@ namespace Supermarket.UnitTests.Categories
             Assert.Equal("New Name", result.Name);
             Assert.False(result.IsActive);
             _repoMock.Verify(r => r.UpdateAsync(existingCategory), Times.Once);
+            VerifyAudit("CATEGORY_UPDATE", "1", "New Name");
         }
 
         [Fact]
@@ -83,7 +88,7 @@ namespace Supermarket.UnitTests.Categories
         [Fact]
         public async Task DeleteAsync_ShouldPhysicalDelete_WhenNoProducts()
         {
-            var existingCategory = new Category { Id = 1 };
+            var existingCategory = new Category { Id = 1, Name = "Unused Category" };
             _repoMock.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(existingCategory);
             _repoMock.Setup(r => r.HasProductsAsync(1)).ReturnsAsync(false);
 
@@ -92,12 +97,13 @@ namespace Supermarket.UnitTests.Categories
             Assert.Equal("DELETED", result.Action);
             _repoMock.Verify(r => r.DeleteAsync(1), Times.Once);
             _repoMock.Verify(r => r.UpdateAsync(It.IsAny<Category>()), Times.Never);
+            VerifyAudit("CATEGORY_DELETE", "1", "Unused Category");
         }
 
         [Fact]
         public async Task DeleteAsync_ShouldDisable_WhenHasProducts()
         {
-            var existingCategory = new Category { Id = 1, IsActive = true };
+            var existingCategory = new Category { Id = 1, Name = "Used Category", IsActive = true };
             _repoMock.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(existingCategory);
             _repoMock.Setup(r => r.HasProductsAsync(1)).ReturnsAsync(true);
 
@@ -107,6 +113,19 @@ namespace Supermarket.UnitTests.Categories
             Assert.False(existingCategory.IsActive);
             _repoMock.Verify(r => r.UpdateAsync(existingCategory), Times.Once);
             _repoMock.Verify(r => r.DeleteAsync(It.IsAny<long>()), Times.Never);
+            VerifyAudit("CATEGORY_DEACTIVATE", "1", "Used Category");
+        }
+
+        private void VerifyAudit(string action, string entityId, string? entityDisplayName)
+        {
+            _auditLogMock.Verify(a => a.RecordAsync(
+                action,
+                "Category",
+                entityId,
+                entityDisplayName,
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
         }
     }
 }

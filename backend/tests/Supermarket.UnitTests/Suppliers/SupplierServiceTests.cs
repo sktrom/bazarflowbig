@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Moq;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Suppliers.Interfaces;
 using Supermarket.Application.Suppliers.Services;
 using Supermarket.Contracts.Suppliers;
@@ -13,12 +14,14 @@ namespace Supermarket.UnitTests.Suppliers
     public class SupplierServiceTests
     {
         private readonly Mock<ISupplierRepository> _repoMock;
+        private readonly Mock<IAuditLogService> _auditLogMock;
         private readonly SupplierService _service;
 
         public SupplierServiceTests()
         {
             _repoMock = new Mock<ISupplierRepository>();
-            _service = new SupplierService(_repoMock.Object);
+            _auditLogMock = new Mock<IAuditLogService>();
+            _service = new SupplierService(_repoMock.Object, _auditLogMock.Object);
         }
 
         [Fact]
@@ -52,6 +55,7 @@ namespace Supermarket.UnitTests.Suppliers
                 s.IsActive &&
                 s.CreatedAt != default &&
                 s.UpdatedAt != default)), Times.Once);
+            VerifyAudit("SUPPLIER_CREATE", "1", "Main Supplier");
         }
 
         [Fact]
@@ -110,6 +114,7 @@ namespace Supermarket.UnitTests.Suppliers
             Assert.False(result.IsActive);
             Assert.True(result.UpdatedAt > supplier.CreatedAt);
             _repoMock.Verify(r => r.UpdateAsync(supplier), Times.Once);
+            VerifyAudit("SUPPLIER_UPDATE", "1", "New Supplier");
         }
 
         [Fact]
@@ -125,6 +130,7 @@ namespace Supermarket.UnitTests.Suppliers
             Assert.Equal("DELETED", result.Action);
             _repoMock.Verify(r => r.DeleteAsync(supplier), Times.Once);
             _repoMock.Verify(r => r.UpdateAsync(It.IsAny<Supplier>()), Times.Never);
+            VerifyAudit("SUPPLIER_DELETE", "1", "Unused");
         }
 
         [Fact]
@@ -141,6 +147,7 @@ namespace Supermarket.UnitTests.Suppliers
             Assert.False(supplier.IsActive);
             _repoMock.Verify(r => r.UpdateAsync(supplier), Times.Once);
             _repoMock.Verify(r => r.DeleteAsync(It.IsAny<Supplier>()), Times.Never);
+            VerifyAudit("SUPPLIER_DEACTIVATE", "1", "Used");
         }
 
         [Fact]
@@ -167,6 +174,18 @@ namespace Supermarket.UnitTests.Suppliers
             Assert.Equal(2, result.Items.Count);
             Assert.Contains(result.Items, s => s.Name == "A" && s.IsActive);
             Assert.Contains(result.Items, s => s.Name == "B" && !s.IsActive);
+        }
+
+        private void VerifyAudit(string action, string entityId, string entityDisplayName)
+        {
+            _auditLogMock.Verify(a => a.RecordAsync(
+                action,
+                "Supplier",
+                entityId,
+                entityDisplayName,
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Categories.Interfaces;
 using Supermarket.Contracts.Categories;
 using Supermarket.Domain.Entities;
@@ -10,10 +11,12 @@ namespace Supermarket.Application.Categories.Services
     public class CategoryService : ICategoryService
     {
         private readonly ICategoryRepository _repository;
+        private readonly IAuditLogService _auditLogService;
 
-        public CategoryService(ICategoryRepository repository)
+        public CategoryService(ICategoryRepository repository, IAuditLogService auditLogService)
         {
             _repository = repository;
+            _auditLogService = auditLogService;
         }
 
         public async Task<CategoryListResponse> GetAllAsync()
@@ -46,6 +49,7 @@ namespace Supermarket.Application.Categories.Services
             };
 
             var created = await _repository.CreateAsync(category);
+            await RecordAuditAsync("CATEGORY_CREATE", created);
 
             return new CategoryItem
             {
@@ -78,6 +82,7 @@ namespace Supermarket.Application.Categories.Services
             category.IsActive = request.IsActive;
 
             await _repository.UpdateAsync(category);
+            await RecordAuditAsync("CATEGORY_UPDATE", category);
 
             return new CategoryItem
             {
@@ -98,6 +103,7 @@ namespace Supermarket.Application.Categories.Services
             {
                 category.IsActive = false;
                 await _repository.UpdateAsync(category);
+                await RecordAuditAsync("CATEGORY_DEACTIVATE", category);
                 return new DeleteCategoryResponse 
                 { 
                     Success = true, 
@@ -108,12 +114,35 @@ namespace Supermarket.Application.Categories.Services
             else
             {
                 await _repository.DeleteAsync(id);
+                await RecordAuditAsync("CATEGORY_DELETE", category);
                 return new DeleteCategoryResponse 
                 { 
                     Success = true, 
                     Action = "DELETED", 
                     Message = "Category deleted successfully." 
                 };
+            }
+        }
+
+        private async Task RecordAuditAsync(string action, Category category)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    "Category",
+                    category.Id.ToString(),
+                    category.Name,
+                    metadata: new
+                    {
+                        categoryId = category.Id,
+                        category.Name,
+                        category.IsActive
+                    });
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break category operations.
             }
         }
     }

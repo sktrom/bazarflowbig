@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Offers.Interfaces;
 using Supermarket.Contracts.Offers;
 using Supermarket.Domain.Entities;
@@ -11,10 +12,12 @@ namespace Supermarket.Application.Offers.Services
     public class OfferService : IOfferService
     {
         private readonly IOfferManagementRepository _repository;
+        private readonly IAuditLogService _auditLogService;
 
-        public OfferService(IOfferManagementRepository repository)
+        public OfferService(IOfferManagementRepository repository, IAuditLogService auditLogService)
         {
             _repository = repository;
+            _auditLogService = auditLogService;
         }
 
         public async Task<OfferListResponse> GetAllAsync()
@@ -57,6 +60,7 @@ namespace Supermarket.Application.Offers.Services
 
             var created = await _repository.CreateAsync(offer);
             var fetched = await _repository.GetByIdAsync(created.Id);
+            await RecordAuditAsync("OFFER_CREATE", fetched ?? created);
 
             return MapToDetailResponse(fetched ?? created);
         }
@@ -84,6 +88,7 @@ namespace Supermarket.Application.Offers.Services
             await _repository.UpdateAsync(offer);
             
             var fetched = await _repository.GetByIdAsync(offer.Id);
+            await RecordAuditAsync("OFFER_UPDATE", fetched ?? offer);
             return MapToDetailResponse(fetched ?? offer);
         }
 
@@ -96,6 +101,7 @@ namespace Supermarket.Application.Offers.Services
             offer.UpdatedAt = DateTime.UtcNow;
 
             await _repository.UpdateAsync(offer);
+            await RecordAuditAsync("OFFER_CANCEL", offer);
 
             return new CancelOfferResponse 
             { 
@@ -129,12 +135,37 @@ namespace Supermarket.Application.Offers.Services
 
             // Provable and Unused
             await _repository.DeleteAsync(id);
+            await RecordAuditAsync("OFFER_DELETE", offer);
 
             return new DeleteOfferResponse 
             { 
                 Success = true, 
                 Message = "Offer deleted successfully." 
             };
+        }
+
+        private async Task RecordAuditAsync(string action, Offer offer)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    "Offer",
+                    offer.Id.ToString(),
+                    offer.Product?.Name,
+                    metadata: new
+                    {
+                        offerId = offer.Id,
+                        offer.ProductId,
+                        discountType = offer.DiscountType.ToString(),
+                        offer.DiscountValue,
+                        offer.IsActive
+                    });
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break offer operations.
+            }
         }
 
         private static OfferDetailResponse MapToDetailResponse(Offer o)

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Products.Interfaces;
 using Supermarket.Contracts.Products;
 using Supermarket.Domain.Entities;
@@ -10,10 +11,12 @@ namespace Supermarket.Application.Products.Services
     public class ProductService : IProductService
     {
         private readonly IProductManagementRepository _repository;
+        private readonly IAuditLogService _auditLogService;
 
-        public ProductService(IProductManagementRepository repository)
+        public ProductService(IProductManagementRepository repository, IAuditLogService auditLogService)
         {
             _repository = repository;
+            _auditLogService = auditLogService;
         }
 
         public async Task<ProductListResponse> GetAllAsync()
@@ -74,6 +77,7 @@ namespace Supermarket.Application.Products.Services
 
             // Re-fetch to get Category navigation property populated if needed, or simply map
             var fetched = await _repository.GetByIdAsync(created.Id);
+            await RecordAuditAsync("PRODUCT_CREATE", fetched ?? created);
             return MapToDetailResponse(fetched ?? created);
         }
 
@@ -117,6 +121,7 @@ namespace Supermarket.Application.Products.Services
             await _repository.UpdateAsync(product);
 
             var fetched = await _repository.GetByIdAsync(product.Id);
+            await RecordAuditAsync("PRODUCT_UPDATE", fetched ?? product);
             return MapToDetailResponse(fetched ?? product);
         }
 
@@ -132,6 +137,7 @@ namespace Supermarket.Application.Products.Services
                 product.IsActive = false;
                 product.UpdatedAt = DateTime.UtcNow;
                 await _repository.UpdateAsync(product);
+                await RecordAuditAsync("PRODUCT_DEACTIVATE", product);
                 return new DeleteProductResponse 
                 { 
                     Success = true, 
@@ -142,6 +148,7 @@ namespace Supermarket.Application.Products.Services
             else
             {
                 await _repository.DeleteAsync(id);
+                await RecordAuditAsync("PRODUCT_DELETE", product);
                 return new DeleteProductResponse 
                 { 
                     Success = true, 
@@ -169,6 +176,31 @@ namespace Supermarket.Application.Products.Services
                 CreatedAt = p.CreatedAt,
                 UpdatedAt = p.UpdatedAt
             };
+        }
+
+        private async Task RecordAuditAsync(string action, Product product)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    "Product",
+                    product.Id.ToString(),
+                    product.Name,
+                    metadata: new
+                    {
+                        productId = product.Id,
+                        product.Name,
+                        product.Barcode,
+                        product.CategoryId,
+                        product.PriceUsd,
+                        product.IsActive
+                    });
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break product operations.
+            }
         }
     }
 }

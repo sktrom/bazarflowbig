@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Moq;
+using Supermarket.Application.AuditLogs.Interfaces;
 using Supermarket.Application.Offers.Interfaces;
 using Supermarket.Application.Offers.Services;
 using Supermarket.Contracts.Offers;
@@ -14,12 +15,14 @@ namespace Supermarket.UnitTests.Offers
     public class OfferServiceTests
     {
         private readonly Mock<IOfferManagementRepository> _repoMock;
+        private readonly Mock<IAuditLogService> _auditLogMock;
         private readonly OfferService _service;
 
         public OfferServiceTests()
         {
             _repoMock = new Mock<IOfferManagementRepository>();
-            _service = new OfferService(_repoMock.Object);
+            _auditLogMock = new Mock<IAuditLogService>();
+            _service = new OfferService(_repoMock.Object, _auditLogMock.Object);
         }
 
         [Fact]
@@ -58,6 +61,25 @@ namespace Supermarket.UnitTests.Offers
             Assert.Equal("Percent", result.DiscountType);
             Assert.True(result.IsActive);
             _repoMock.Verify(r => r.CreateAsync(It.Is<Offer>(o => o.ProductId == 1 && o.DiscountValue == 20)), Times.Once);
+            VerifyAudit("OFFER_CREATE", "100");
+        }
+
+        [Fact]
+        public async Task UpdateAsync_ShouldSucceed_WhenValidEntity()
+        {
+            var existingOffer = new Offer { Id = 100, ProductId = 1, DiscountType = OfferDiscountType.Percent, DiscountValue = 10, IsActive = true };
+            var request = new UpdateOfferRequest { ProductId = 2, DiscountType = "Amount", DiscountValue = 5 };
+
+            _repoMock.Setup(r => r.ProductExistsAsync(2)).ReturnsAsync(true);
+            _repoMock.Setup(r => r.GetByIdAsync(100)).ReturnsAsync(existingOffer);
+
+            var result = await _service.UpdateAsync(100, request);
+
+            Assert.Equal(2, result.ProductId);
+            Assert.Equal("Amount", result.DiscountType);
+            Assert.Equal(5, result.DiscountValue);
+            _repoMock.Verify(r => r.UpdateAsync(existingOffer), Times.Once);
+            VerifyAudit("OFFER_UPDATE", "100");
         }
 
         [Fact]
@@ -71,6 +93,7 @@ namespace Supermarket.UnitTests.Offers
             Assert.True(result.Success);
             Assert.False(existingOffer.IsActive);
             _repoMock.Verify(r => r.UpdateAsync(existingOffer), Times.Once);
+            VerifyAudit("OFFER_CANCEL", "1");
         }
 
         [Fact]
@@ -129,6 +152,7 @@ namespace Supermarket.UnitTests.Offers
 
             Assert.True(result.Success);
             _repoMock.Verify(r => r.DeleteAsync(1), Times.Once);
+            VerifyAudit("OFFER_DELETE", "1");
         }
 
         // --- ProductsLookup tests ---
@@ -180,6 +204,18 @@ namespace Supermarket.UnitTests.Offers
             await _service.ProductsLookupAsync("anything");
 
             _repoMock.Verify(r => r.ProductsLookupAsync(It.IsAny<string?>(), 20), Times.Once);
+        }
+
+        private void VerifyAudit(string action, string entityId)
+        {
+            _auditLogMock.Verify(a => a.RecordAsync(
+                action,
+                "Offer",
+                entityId,
+                null,
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
         }
     }
 }
