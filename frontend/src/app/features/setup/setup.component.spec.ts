@@ -126,6 +126,18 @@ describe('SetupComponent', () => {
     expect(component.currentStep).toBe(4);
   });
 
+  it('should reject DEFAULT_DEVICE on Step 3 before submit', () => {
+    fixture.detectChanges();
+    component.currentStep = 3;
+
+    component.setupForm.get('deviceCode')?.setValue('DEFAULT_DEVICE');
+    component.setupForm.get('deviceName')?.setValue('Main Cashier');
+
+    expect(component.setupForm.get('deviceCode')?.hasError('defaultDeviceCode')).toBeTrue();
+    expect(component.canGoNext(3)).toBeFalse();
+    expect(setupApiSpy.complete).not.toHaveBeenCalled();
+  });
+
   // --- Submit and Redirect ---
 
   it('should submit correct form data and redirect to /login on success', () => {
@@ -186,6 +198,7 @@ describe('SetupComponent', () => {
       'INVALID_ADMIN_PASSWORD': 'كلمة المرور غير آمنة أو مطابقة لاسم المستخدم.',
       'INVALID_EXCHANGE_RATE': 'سعر الصرف يجب أن يكون أكبر من الصفر.',
       'DEVICE_CODE_ALREADY_EXISTS': 'رمز الجهاز هذا مستخدم بالفعل في النظام.',
+      'DEFAULT_DEVICE_NOT_ALLOWED': 'لا يمكن استخدام DEFAULT_DEVICE كجهاز مخصص. أدخل رمز جهاز مختلف.',
       'SETUP_VALIDATION_ERROR': 'حدث خطأ في التحقق من البيانات المدخلة.'
     };
 

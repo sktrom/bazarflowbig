@@ -43,6 +43,7 @@ namespace Supermarket.Infrastructure
             services.AddScoped<IEmployeeRepository, EmployeeRepository>();
             services.AddScoped<IDeviceRepository, DeviceRepository>();
             services.AddScoped<IAuthSessionRepository, AuthSessionRepository>();
+            services.AddScoped<ISetupStateRepository, SetupStateRepository>();
             services.AddScoped<IEmployeeScreenPermissionRepository, EmployeeScreenPermissionRepository>();
             services.AddScoped<ISessionHistoryRepository, SessionHistoryRepository>();
 

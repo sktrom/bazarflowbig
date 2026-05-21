@@ -125,6 +125,30 @@ namespace Supermarket.IntegrationTests.Setup
         }
 
         [Fact]
+        public async Task Complete_Rejects_DefaultDeviceCode()
+        {
+            var db = CreateInMemoryDbContext();
+            var controller = new SetupController(db, _passwordHasherMock.Object, _auditLogMock.Object);
+
+            var request = new SetupCompleteRequest(
+                AdminFullName: "Super Admin",
+                AdminUsername: "admin",
+                AdminPassword: "strongPassword123",
+                StoreName: "My Store",
+                ExchangeRate: 15000,
+                DeviceCode: "DEFAULT_DEVICE",
+                DeviceName: "Default Device"
+            );
+
+            var result = await controller.Complete(request);
+
+            var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+            dynamic errorObj = badRequest.Value!;
+            Assert.Equal("DEFAULT_DEVICE_NOT_ALLOWED", (string)errorObj.GetType().GetProperty("error").GetValue(errorObj, null));
+            Assert.Empty(await db.PosDevices.ToListAsync());
+        }
+
+        [Fact]
         public async Task Complete_Rejects_EmptyRequiredFields()
         {
             var db = CreateInMemoryDbContext();

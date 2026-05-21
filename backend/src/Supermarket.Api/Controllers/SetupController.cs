@@ -94,6 +94,15 @@ namespace Supermarket.Api.Controllers
             var trimmedDeviceCode = request.DeviceCode.Trim();
             var trimmedUsername = request.AdminUsername.Trim();
 
+            if (trimmedDeviceCode.Equals("DEFAULT_DEVICE", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new
+                {
+                    error = "DEFAULT_DEVICE_NOT_ALLOWED",
+                    message = "DEFAULT_DEVICE cannot be used as the first custom POS device."
+                });
+            }
+
             // Device code uniqueness check
             var deviceExists = await _db.PosDevices
                 .AnyAsync(d => d.DeviceCode.ToLower() == trimmedDeviceCode.ToLower());

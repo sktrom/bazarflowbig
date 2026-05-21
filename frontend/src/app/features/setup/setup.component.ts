@@ -16,6 +16,15 @@ function passwordStrengthValidator(control: AbstractControl): ValidationErrors |
   return null;
 }
 
+function deviceCodeValidator(control: AbstractControl): ValidationErrors | null {
+  const value = control.value;
+  if (!value) return null;
+  if (value.trim().toUpperCase() === 'DEFAULT_DEVICE') {
+    return { defaultDeviceCode: true };
+  }
+  return null;
+}
+
 @Component({
   selector: 'app-setup',
   standalone: true,
@@ -233,6 +242,9 @@ function passwordStrengthValidator(control: AbstractControl): ValidationErrors |
                   <app-form-error [show]="isFieldInvalid('deviceCode')">
                     رمز الجهاز مطلوب.
                   </app-form-error>
+                  <app-form-error [show]="!!(isFieldInvalid('deviceCode') && setupForm.get('deviceCode')?.hasError('defaultDeviceCode'))">
+                    لا يمكن استخدام DEFAULT_DEVICE كجهاز مخصص. أدخل رمز جهاز مختلف.
+                  </app-form-error>
                 </div>
 
                 <!-- Device Name -->
@@ -373,7 +385,7 @@ export class SetupComponent implements OnInit {
       adminUsername: ['', Validators.required],
       adminPassword: ['', [Validators.required, Validators.minLength(6), passwordStrengthValidator]],
       confirmPassword: ['', Validators.required],
-      deviceCode: ['', Validators.required],
+      deviceCode: ['', [Validators.required, deviceCodeValidator]],
       deviceName: ['', Validators.required]
     });
 
@@ -534,6 +546,9 @@ export class SetupComponent implements OnInit {
     }
     if (errorCode === 'DEVICE_CODE_ALREADY_EXISTS') {
       return 'رمز الجهاز هذا مستخدم بالفعل في النظام.';
+    }
+    if (errorCode === 'DEFAULT_DEVICE_NOT_ALLOWED') {
+      return 'لا يمكن استخدام DEFAULT_DEVICE كجهاز مخصص. أدخل رمز جهاز مختلف.';
     }
     if (errorCode === 'SETUP_VALIDATION_ERROR') {
       return 'حدث خطأ في التحقق من البيانات المدخلة.';

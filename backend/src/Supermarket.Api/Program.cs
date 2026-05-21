@@ -1,6 +1,7 @@
 using Supermarket.Api.Middleware;
 using Supermarket.Api.Services;
 using Supermarket.Application;
+using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Infrastructure;
 
@@ -17,6 +18,7 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddScoped<SessionContextAccessor>();
 builder.Services.AddScoped<ISessionContextAccessor>(sp => sp.GetRequiredService<SessionContextAccessor>());
 builder.Services.AddScoped<ISessionContext>(sp => sp.GetRequiredService<SessionContextAccessor>().Current);
+builder.Services.AddSingleton<IAuthPolicy, AuthPolicy>();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
