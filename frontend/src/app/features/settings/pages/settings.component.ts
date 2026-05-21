@@ -11,7 +11,7 @@ import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse
 type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit' | 'devices' | 'sessions';
 type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | 'deviceCreate' | 'deviceEdit' | 'deviceDelete' | 'sessionConfirmClose' | null;
 
-const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings'];
+const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings','Purchases'];
 
 const ERR: Record<string,string> = {
   USERNAME_ALREADY_EXISTS: 'اسم المستخدم موجود مسبقًا',
