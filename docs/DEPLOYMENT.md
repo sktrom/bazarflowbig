@@ -203,6 +203,23 @@ Use the following administrative scripts (running in Administrator mode) to mana
   powershell -ExecutionPolicy Bypass -File scripts\uninstall-service.ps1
   ```
 
+### 4. Create Desktop Shortcut
+
+You can create a desktop shortcut named **BazarFlow** that opens the application URL in the default web browser with the custom brand icon.
+
+To create the shortcut:
+1. Ensure the Windows Service is running (run `scripts\start-service.ps1` first).
+2. Run the shortcut creation script (does **not** require Administrator privileges):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\create-desktop-shortcut.ps1
+   ```
+3. Open BazarFlow at any time by double-clicking the new **BazarFlow** icon on your Desktop.
+
+**Parameters supported by `create-desktop-shortcut.ps1`**:
+* `-Url`: The application hosting URL (default is `http://localhost:5070`).
+* `-ShortcutName`: The name of the shortcut file (default is `BazarFlow`).
+* `-IconPath`: Path to the brand `.ico` file (default is `packaging/assets/bazarflow-icon.ico`).
+
 ## Serve Frontend (Alternative via IIS)
 
 Serve the files in:
