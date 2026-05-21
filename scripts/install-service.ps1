@@ -67,7 +67,12 @@ $envVars = @(
     "Cors__AllowedOrigins__0=$AllowedOrigins",
     "AllowedHosts=$AllowedHosts"
 )
-Set-ItemProperty -Path $regPath -Name "Environment" -Value $envVars -PropertyType MultiString
+if (Get-ItemProperty -Path $regPath -Name "Environment" -ErrorAction SilentlyContinue) {
+    Set-ItemProperty -Path $regPath -Name "Environment" -Value ([string[]]$envVars)
+}
+else {
+    New-ItemProperty -Path $regPath -Name "Environment" -Value ([string[]]$envVars) -PropertyType MultiString -Force | Out-Null
+}
 
 # 8. Set folder permissions for the LocalService account (least privilege service account)
 Write-Host "Configuring NTFS folder permissions..."
