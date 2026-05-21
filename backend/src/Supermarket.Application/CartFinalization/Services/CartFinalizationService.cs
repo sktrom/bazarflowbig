@@ -60,6 +60,19 @@ namespace Supermarket.Application.CartFinalization.Services
             await _finalizationRepo.UpdateInvoiceAsync(invoice);
             await _finalizationRepo.SaveChangesAsync();
 
+            await RecordAuditAsync(
+                "SUSPEND_INVOICE",
+                invoice,
+                new
+                {
+                    invoiceId = invoice.Id,
+                    invoice.InvoiceNumber,
+                    status = invoice.Status.ToString(),
+                    invoice.TotalUsd,
+                    invoice.TotalSyp,
+                    suspensionReason = invoice.SuspensionReason?.ToString()
+                });
+
             return MapToCartResponse(invoice);
         }
 
@@ -115,11 +128,22 @@ namespace Supermarket.Application.CartFinalization.Services
             var invoice = await _finalizationRepo.GetWorkingInvoiceByEmployeeAsync(employeeId);
             if (invoice == null) throw new InvalidOperationException("NO_WORKING_CART_EXISTS");
 
+            var cancelMetadata = new
+            {
+                invoiceId = invoice.Id,
+                invoice.InvoiceNumber,
+                status = invoice.Status.ToString(),
+                invoice.TotalUsd,
+                invoice.TotalSyp
+            };
+
             // Release any reserved allocations first
             await ReleaseInventoryAsync(invoice.Id);
 
             // Physical delete inside same unit-of-work (SaveChanges called by repo)
             await _finalizationRepo.DeleteInvoiceWithLinesAsync(invoice.Id);
+
+            await RecordAuditAsync("CANCEL_INVOICE", invoice, cancelMetadata);
 
             return new CartResponse(); // Empty model
         }
@@ -216,6 +240,23 @@ namespace Supermarket.Application.CartFinalization.Services
         }
 
         // ─── Mapping ──────────────────────────────────────────────────────────────
+
+        private async Task RecordAuditAsync(string action, Invoice invoice, object metadata)
+        {
+            try
+            {
+                await _auditLogService.RecordAsync(
+                    action,
+                    "Invoice",
+                    invoice.Id.ToString(),
+                    invoice.InvoiceNumber,
+                    metadata: metadata);
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break cart finalization.
+            }
+        }
 
         private static CartResponse MapToCartResponse(Invoice invoice)
         {

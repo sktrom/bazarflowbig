@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Moq;
 using Supermarket.Application.AuditLogs.Interfaces;
@@ -92,6 +93,41 @@ namespace Supermarket.UnitTests.CartFinalization
             Assert.Equal("INVALID_SUSPENSION_REASON", ex.Message);
         }
 
+        [Fact]
+        public async Task SuspendAsync_ShouldRecordSuspendInvoice()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            var invoice = new Invoice
+            {
+                Id = 10,
+                InvoiceNumber = "INV-10",
+                Status = InvoiceStatus.Working,
+                TotalUsd = 25m,
+                TotalSyp = 375000m
+            };
+            _finalizationRepoMock.Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1)).ReturnsAsync(invoice);
+            SetupReservation(invoice.Id);
+
+            var service = CreateService();
+            await service.SuspendAsync(new SuspendCartRequest { SuspensionReason = "Incomplete" });
+
+            _auditLogMock.Verify(a => a.RecordAsync(
+                "SUSPEND_INVOICE",
+                "Invoice",
+                "10",
+                "INV-10",
+                null,
+                null,
+                It.Is<object>(metadata =>
+                    JsonContains(metadata, "\"invoiceId\":10") &&
+                    JsonContains(metadata, "\"InvoiceNumber\":\"INV-10\"") &&
+                    JsonContains(metadata, "\"status\":\"Suspended\"") &&
+                    JsonContains(metadata, "\"TotalUsd\":25") &&
+                    JsonContains(metadata, "\"TotalSyp\":375000") &&
+                    JsonContains(metadata, "\"suspensionReason\":\"Incomplete\""))),
+                Times.Once);
+        }
+
         // ─── Complete Tests ────────────────────────────────────────────────────────
 
         [Fact]
@@ -139,6 +175,31 @@ namespace Supermarket.UnitTests.CartFinalization
                 null,
                 null,
                 It.IsAny<object>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task CompleteAsync_ShouldNotDuplicateCompleteInvoiceAudit()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            var invoice = new Invoice { Id = 10, InvoiceNumber = "INV-10", Status = InvoiceStatus.Working, TotalUsd = 100m };
+            _finalizationRepoMock.Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1)).ReturnsAsync(invoice);
+            _settingsRepoMock.Setup(r => r.GetRequiredDecimalAsync("exchange_rate_syp")).ReturnsAsync(15000m);
+            _cartRepoMock.Setup(r => r.GetCartLinesAsync(10)).ReturnsAsync(new List<InvoiceLine>());
+            _inventoryRepoMock.Setup(r => r.GetReservedByInvoiceAsync(10)).ReturnsAsync(new List<InvoiceLineBatchAllocation>());
+
+            var service = CreateService();
+            await service.CompleteAsync();
+
+            _auditLogMock.Verify(a => a.RecordAsync(
+                "COMPLETE_INVOICE",
+                "Invoice",
+                "10",
+                "INV-10",
+                null,
+                null,
+                It.IsAny<object>()), Times.Once);
+            VerifyAuditNever("SUSPEND_INVOICE");
+            VerifyAuditNever("CANCEL_INVOICE");
         }
 
         [Fact]
@@ -237,6 +298,89 @@ namespace Supermarket.UnitTests.CartFinalization
         }
 
         [Fact]
+        public async Task CancelCurrentAsync_ShouldRecordCancelInvoice()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            _finalizationRepoMock
+                .Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1))
+                .ReturnsAsync(new Invoice
+                {
+                    Id = 10,
+                    InvoiceNumber = "INV-10",
+                    Status = InvoiceStatus.Working,
+                    TotalUsd = 25m,
+                    TotalSyp = 375000m
+                });
+
+            _inventoryRepoMock
+                .Setup(r => r.GetReservedByInvoiceAsync(10))
+                .ReturnsAsync(new List<InvoiceLineBatchAllocation>());
+
+            var service = CreateService();
+            await service.CancelCurrentAsync();
+
+            _auditLogMock.Verify(a => a.RecordAsync(
+                "CANCEL_INVOICE",
+                "Invoice",
+                "10",
+                "INV-10",
+                null,
+                null,
+                It.Is<object>(metadata =>
+                    JsonContains(metadata, "\"invoiceId\":10") &&
+                    JsonContains(metadata, "\"InvoiceNumber\":\"INV-10\"") &&
+                    JsonContains(metadata, "\"status\":\"Working\"") &&
+                    JsonContains(metadata, "\"TotalUsd\":25") &&
+                    JsonContains(metadata, "\"TotalSyp\":375000"))),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task CartOperation_ShouldSucceed_WhenAuditThrows()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            var invoice = new Invoice { Id = 10, InvoiceNumber = "INV-10", Status = InvoiceStatus.Working };
+            _finalizationRepoMock.Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1)).ReturnsAsync(invoice);
+            SetupReservation(invoice.Id);
+            _auditLogMock
+                .Setup(a => a.RecordAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<object?>(), It.IsAny<object?>(), It.IsAny<object?>()))
+                .ThrowsAsync(new Exception("audit failed"));
+
+            var service = CreateService();
+            var result = await service.SuspendAsync(new SuspendCartRequest { SuspensionReason = "Incomplete" });
+
+            Assert.Equal("Suspended", result.Status);
+        }
+
+        [Fact]
+        public async Task AuditMetadata_ShouldNotContainLinesOrAllocations()
+        {
+            _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
+            var invoice = new Invoice
+            {
+                Id = 10,
+                InvoiceNumber = "INV-10",
+                Status = InvoiceStatus.Working,
+                TotalUsd = 25m
+            };
+            _finalizationRepoMock.Setup(r => r.GetWorkingInvoiceByEmployeeAsync(1)).ReturnsAsync(invoice);
+            SetupReservation(invoice.Id);
+            object? metadata = null;
+            _auditLogMock
+                .Setup(a => a.RecordAsync("SUSPEND_INVOICE", "Invoice", "10", "INV-10", null, null, It.IsAny<object?>()))
+                .Callback<string, string, string?, string?, object?, object?, object?>((_, _, _, _, _, _, capturedMetadata) => metadata = capturedMetadata);
+
+            var service = CreateService();
+            await service.SuspendAsync(new SuspendCartRequest { SuspensionReason = "Incomplete" });
+
+            var serialized = JsonSerializer.Serialize(metadata);
+            Assert.DoesNotContain("Lines", serialized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Allocations", serialized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Batch", serialized, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Product", serialized, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task Cancel_ShouldThrow_WhenNoWorkingCart()
         {
             _sessionContextMock.Setup(s => s.EmployeeId).Returns(1);
@@ -298,5 +442,33 @@ namespace Supermarket.UnitTests.CartFinalization
             Assert.Null(invoice.SuspensionReason);
             Assert.Equal("Working", result.Status);
         }
+
+        private void SetupReservation(long invoiceId)
+        {
+            _cartRepoMock.Setup(r => r.GetCartLinesAsync(invoiceId)).ReturnsAsync(new List<InvoiceLine>
+            {
+                new InvoiceLine { Id = 100, ProductId = 5, Quantity = 2 }
+            });
+
+            _inventoryRepoMock.Setup(r => r.GetAvailableBatchesFEFOAsync(5)).ReturnsAsync(new List<ProductBatch>
+            {
+                new ProductBatch { Id = 50, ProductId = 5, QuantityAvailable = 10 }
+            });
+        }
+
+        private void VerifyAuditNever(string action)
+        {
+            _auditLogMock.Verify(a => a.RecordAsync(
+                action,
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<object?>(),
+                It.IsAny<object?>(),
+                It.IsAny<object?>()), Times.Never);
+        }
+
+        private static bool JsonContains(object value, string expected)
+            => JsonSerializer.Serialize(value).Contains(expected, StringComparison.OrdinalIgnoreCase);
     }
 }
