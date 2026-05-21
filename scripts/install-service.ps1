@@ -17,6 +17,13 @@ if (-not $currentUser.IsInRole([Security.Principal.WindowsBuiltInRole]::Administ
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptRoot
 $binPath = Join-Path $repoRoot "artifacts\single-host\Supermarket.Api.exe"
+if (-not (Test-Path $binPath)) {
+    # Check if we are in the installed folder structure (executable directly under parent folder)
+    $installedBinPath = Join-Path $repoRoot "Supermarket.Api.exe"
+    if (Test-Path $installedBinPath) {
+        $binPath = $installedBinPath
+    }
+}
 
 # 2. Check if Executable Exists
 if (-not (Test-Path $binPath)) {
