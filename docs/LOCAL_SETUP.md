@@ -8,19 +8,25 @@
 
 ## Local Development vs Deployment
 
+> [!IMPORTANT]
+> **Important Distinction (فرق هام جداً):**
+> * `dotnet run` starts the backend from source for **local development only** (`dotnet run` للتطوير فقط).
+> * `ng serve` starts the Angular dev server for **local development only** (`ng serve` للتطوير فقط).
+> * **Deployment** uses published artifacts (`deployment` يستخدم `publish/artifacts` المنتجة في مجلد `artifacts`).
+
+### Local Development
 Local development uses source projects directly:
+* `dotnet run` starts the backend from source.
+* `ng serve` starts the Angular dev server.
+* Development CORS allows the Angular dev server origins (`http://localhost:4200` / `https://localhost:4200`).
 
-* `dotnet run` starts the backend from source for development only.
-* `ng serve` starts the Angular dev server for development only.
-* Development CORS allows the Angular dev server origins.
-
+### Deployment
 Deployment uses published artifacts:
-
-* backend is published with `scripts\build-backend.ps1` into `artifacts\backend`.
-* frontend is built with `scripts\build-frontend.ps1` into `artifacts\frontend`.
-* backend is started from `artifacts\backend\Supermarket.Api.exe` through `scripts\run-backend.ps1`.
-* frontend files are served by IIS or another static file server.
-* production settings must be provided through environment variables, not user-secrets or tracked files.
+* Backend is published with `scripts\build-backend.ps1` into `artifacts\backend`.
+* Frontend is built with `scripts\build-frontend.ps1` into `artifacts\frontend`.
+* Backend is started from `artifacts\backend\Supermarket.Api.exe` through `scripts\run-backend.ps1`.
+* Frontend static files are served by IIS or another production web server.
+* Production settings must be provided through environment variables, not user-secrets or tracked files.
 
 ## Backend Commands
 `appsettings.json` does not store the database password. Configure the local
