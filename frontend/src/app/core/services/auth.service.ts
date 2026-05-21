@@ -34,4 +34,9 @@ export class AuthService {
       })
     );
   }
+
+  logoutLocalOnly(): void {
+    this.sessionService.clearSession();
+    this.setAuthenticated(false);
+  }
 }

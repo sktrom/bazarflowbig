@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, ActivatedRoute } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthApiService } from '../../core/services/auth-api.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -26,6 +26,16 @@ import { FormErrorComponent } from '../../shared/components/form-helpers/form-er
         <!-- Login Card -->
         <div class="card p-8">
           <h2 class="text-xl font-bold text-slate-800 mb-6 text-center">تسجيل الدخول</h2>
+
+          <!-- Session Expired Warning Banner -->
+          <div
+            *ngIf="sessionExpiredMessage"
+            id="session-expired-alert"
+            class="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800 text-center font-medium leading-relaxed"
+            role="alert"
+          >
+            {{ sessionExpiredMessage }}
+          </div>
 
           <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" autocomplete="off" novalidate>
 
@@ -176,6 +186,7 @@ export class LoginComponent implements OnInit {
   apiError: string | null = null;
   showDeviceModal = false;
   lastErrorCode: string | null = null;
+  sessionExpiredMessage: string | null = null;
 
   get deviceCode(): string {
     return this.sessionService.getDeviceCode() || 'DEFAULT_DEVICE';
@@ -184,6 +195,7 @@ export class LoginComponent implements OnInit {
   constructor(
     private fb: FormBuilder,
     private router: Router,
+    private route: ActivatedRoute,
     private authApiService: AuthApiService,
     private authService: AuthService,
     private sessionService: SessionService,
@@ -202,11 +214,29 @@ export class LoginComponent implements OnInit {
       password: ['', [Validators.required, Validators.minLength(1)]]
     });
 
-    // Clear API error on any change
+    // Clear API error and session expired message on any change
     this.loginForm.valueChanges.subscribe(() => {
       if (this.apiError) {
         this.apiError = null;
         this.lastErrorCode = null;
+      }
+      if (this.sessionExpiredMessage) {
+        this.sessionExpiredMessage = null;
+      }
+    });
+
+    // Read query parameters to check if session expired
+    this.route.queryParams.subscribe(params => {
+      if (params['reason'] === 'session-expired') {
+        this.sessionExpiredMessage = 'انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى';
+
+        // Clear query parameters from URL without adding to browser history
+        this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { reason: null },
+          queryParamsHandling: 'merge',
+          replaceUrl: true
+        });
       }
     });
   }
@@ -224,6 +254,7 @@ export class LoginComponent implements OnInit {
 
     this.isLoading = true;
     this.apiError = null;
+    this.sessionExpiredMessage = null;
 
     const { username, password } = this.loginForm.value;
 

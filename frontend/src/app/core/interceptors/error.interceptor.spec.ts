@@ -16,8 +16,9 @@ describe('ErrorInterceptor', () => {
 
   beforeEach(() => {
     originalProduction = environment.production;
-    authServiceSpy = jasmine.createSpyObj('AuthService', ['logout']);
+    authServiceSpy = jasmine.createSpyObj('AuthService', ['logout', 'logoutLocalOnly']);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
+    routerSpy.navigate.and.returnValue(Promise.resolve(true));
     consoleErrorSpy = spyOn(console, 'error');
 
     TestBed.configureTestingModule({
@@ -88,5 +89,101 @@ describe('ErrorInterceptor', () => {
     });
 
     httpMock.expectOne('/api/test').flush({}, { status: 500, statusText: 'Server Error' });
+  });
+
+  it('should redirect to login and clear local session on NO_ACTIVE_SESSION from protected endpoint', (done) => {
+    http.get('/api/products').subscribe({
+      error: () => {
+        expect(authServiceSpy.logoutLocalOnly).toHaveBeenCalled();
+        expect(routerSpy.navigate).toHaveBeenCalledWith(['/login'], { queryParams: { reason: 'session-expired' } });
+        done();
+      }
+    });
+
+    httpMock.expectOne('/api/products').flush(
+      { error: 'NO_ACTIVE_SESSION', message: 'Session expired' },
+      { status: 400, statusText: 'Bad Request' }
+    );
+  });
+
+  it('should redirect to login and clear local session on 401 status from protected endpoint', (done) => {
+    http.get('/api/products').subscribe({
+      error: () => {
+        expect(authServiceSpy.logoutLocalOnly).toHaveBeenCalled();
+        expect(routerSpy.navigate).toHaveBeenCalledWith(['/login'], { queryParams: { reason: 'session-expired' } });
+        done();
+      }
+    });
+
+    httpMock.expectOne('/api/products').flush(
+      { error: 'UNAUTHORIZED', message: 'Unauthorized' },
+      { status: 401, statusText: 'Unauthorized' }
+    );
+  });
+
+  it('should not redirect on 401 from login endpoint', (done) => {
+    http.post('/api/auth/login', {}).subscribe({
+      error: () => {
+        expect(authServiceSpy.logoutLocalOnly).not.toHaveBeenCalled();
+        expect(routerSpy.navigate).not.toHaveBeenCalled();
+        done();
+      }
+    });
+
+    httpMock.expectOne('/api/auth/login').flush(
+      { error: 'LOGIN_FAILED', message: 'Login failed' },
+      { status: 401, statusText: 'Unauthorized' }
+    );
+  });
+
+  it('should not redirect on setup endpoints failures', (done) => {
+    http.get('/api/setup/status').subscribe({
+      error: () => {
+        expect(authServiceSpy.logoutLocalOnly).not.toHaveBeenCalled();
+        expect(routerSpy.navigate).not.toHaveBeenCalled();
+        done();
+      }
+    });
+
+    httpMock.expectOne('/api/setup/status').flush(
+      { error: 'SETUP_REQUIRED', message: 'Setup required' },
+      { status: 401, statusText: 'Unauthorized' }
+    );
+  });
+
+  it('should prevent duplicate redirects when multiple requests fail concurrently', (done) => {
+    let callCount = 0;
+    
+    http.get('/api/products').subscribe({
+      error: () => {
+        callCount++;
+        checkDone();
+      }
+    });
+
+    http.get('/api/reports').subscribe({
+      error: () => {
+        callCount++;
+        checkDone();
+      }
+    });
+
+    function checkDone() {
+      if (callCount === 2) {
+        expect(authServiceSpy.logoutLocalOnly).toHaveBeenCalledTimes(1);
+        expect(routerSpy.navigate).toHaveBeenCalledTimes(1);
+        done();
+      }
+    }
+
+    httpMock.expectOne('/api/products').flush(
+      { error: 'NO_ACTIVE_SESSION', message: 'Expired' },
+      { status: 401, statusText: 'Unauthorized' }
+    );
+
+    httpMock.expectOne('/api/reports').flush(
+      { error: 'NO_ACTIVE_SESSION', message: 'Expired' },
+      { status: 401, statusText: 'Unauthorized' }
+    );
   });
 });

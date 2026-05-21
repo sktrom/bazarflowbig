@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Router, ActivatedRoute } from '@angular/router';
+import { of, throwError, BehaviorSubject } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { LoginComponent } from './login.component';
@@ -18,6 +18,7 @@ describe('LoginComponent', () => {
   let sessionServiceSpy: jasmine.SpyObj<SessionService>;
   let permissionsServiceSpy: jasmine.SpyObj<PermissionsService>;
   let routerSpy: jasmine.SpyObj<Router>;
+  let queryParamsSubject: BehaviorSubject<any>;
 
   const mockSuccessResponse = {
     employeeId: 1,
@@ -29,6 +30,7 @@ describe('LoginComponent', () => {
   };
 
   beforeEach(async () => {
+    queryParamsSubject = new BehaviorSubject<any>({});
     authApiSpy = jasmine.createSpyObj('AuthApiService', ['login']);
     authServiceSpy = jasmine.createSpyObj('AuthService', ['isLoggedIn', 'setAuthenticated']);
     sessionServiceSpy = jasmine.createSpyObj('SessionService', [
@@ -54,7 +56,13 @@ describe('LoginComponent', () => {
         { provide: AuthService, useValue: authServiceSpy },
         { provide: SessionService, useValue: sessionServiceSpy },
         { provide: PermissionsService, useValue: permissionsServiceSpy },
-        { provide: Router, useValue: routerSpy }
+        { provide: Router, useValue: routerSpy },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            queryParams: queryParamsSubject.asObservable()
+          }
+        }
       ]
     }).compileComponents();
 
@@ -281,6 +289,40 @@ describe('LoginComponent', () => {
     fixture.detectChanges();
     const banner = fixture.nativeElement.querySelector('#default-device-warning');
     expect(banner).toBeNull();
+  });
+
+  it('should show session expired message when reason is session-expired', () => {
+    queryParamsSubject.next({ reason: 'session-expired' });
+    fixture.detectChanges();
+
+    expect(component.sessionExpiredMessage).toBe('انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى');
+    const alert = fixture.nativeElement.querySelector('#session-expired-alert');
+    expect(alert).toBeTruthy();
+    expect(alert.textContent).toContain('انتهت الجلسة');
+  });
+
+  it('should clear query parameter in the URL on init when session expired warning is shown', () => {
+    queryParamsSubject.next({ reason: 'session-expired' });
+    fixture.detectChanges();
+
+    expect(routerSpy.navigate).toHaveBeenCalledWith([], jasmine.objectContaining({
+      queryParams: jasmine.objectContaining({ reason: null }),
+      replaceUrl: true
+    }));
+  });
+
+  it('should clear session expired message when user modifies form fields', () => {
+    queryParamsSubject.next({ reason: 'session-expired' });
+    fixture.detectChanges();
+
+    expect(component.sessionExpiredMessage).toBe('انتهت الجلسة، يرجى تسجيل الدخول مرة أخرى');
+
+    component.loginForm.get('username')?.setValue('typing...');
+    fixture.detectChanges();
+
+    expect(component.sessionExpiredMessage).toBeNull();
+    const alert = fixture.nativeElement.querySelector('#session-expired-alert');
+    expect(alert).toBeNull();
   });
 });
 

@@ -8,6 +8,8 @@ import { environment } from '../../../environments/environment';
 
 @Injectable()
 export class ErrorInterceptor implements HttpInterceptor {
+  private isHandlingSessionExpired = false;
+
   constructor(private router: Router, private authService: AuthService) {}
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
@@ -15,10 +17,24 @@ export class ErrorInterceptor implements HttpInterceptor {
       catchError((error: HttpErrorResponse) => {
         const normalizedError = this.normalizeError(error);
 
-        if (error.status === 401) {
-          // Unauthorized, session might be invalid/expired
-          this.authService.logout();
-          this.router.navigate(['/unauthorized']);
+        const isLoginRequest = req.url.includes('/api/auth/login');
+        const isSetupRequest = req.url.includes('/api/setup/status') || req.url.includes('/api/setup/complete');
+        const isLoginPage = !!this.router.url?.startsWith('/login');
+        const isSessionExpired = error.status === 401 || normalizedError.error?.error === 'NO_ACTIVE_SESSION';
+
+        if (isSessionExpired && !isLoginRequest && !isSetupRequest && !isLoginPage) {
+          if (!this.isHandlingSessionExpired) {
+            this.isHandlingSessionExpired = true;
+            this.authService.logoutLocalOnly();
+            const nav = this.router.navigate(['/login'], { queryParams: { reason: 'session-expired' } });
+            if (nav && typeof nav.then === 'function') {
+              nav.then(() => {
+                this.isHandlingSessionExpired = false;
+              });
+            } else {
+              this.isHandlingSessionExpired = false;
+            }
+          }
         } else if (error.status === 403) {
           // Forbidden, missing screen permission
           this.router.navigate(['/unauthorized']);
