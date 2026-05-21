@@ -17,6 +17,11 @@ Verify the following before making a final production release:
 - [ ] inventory deduction verified
 - [ ] exports verified
 - [ ] no console critical errors
+- [ ] backup created
+- [ ] backup file exists
+- [ ] RESTORE VERIFYONLY succeeded
+- [ ] restore to test database succeeded
+- [ ] no backup in public/static folder
 - [ ] production environment values reviewed
 - [ ] default admin password changed before real production
 - [ ] no real database connection string is stored in tracked files
@@ -30,6 +35,7 @@ Verify the following before making a final production release:
 - [ ] no wildcard CORS origins configured in production
 - [ ] production `AllowedHosts` is not `*`
 - [ ] backup folder ACL verified for the SQL Server service account
+- [ ] backup folder ACL verified
 - [ ] first-run setup verified
 - [ ] Swagger is not available in Production
 - [ ] Swagger off in Production
