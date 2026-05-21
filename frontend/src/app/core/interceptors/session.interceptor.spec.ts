@@ -51,4 +51,22 @@ describe('SessionInterceptor', () => {
     expect(req.request.headers.has('X-Session-Token')).toBeFalse();
     req.flush({});
   });
+
+  it('should not inject X-Session-Token for public bypass endpoints even when token exists', () => {
+    sessionService.getSessionToken.and.returnValue('mock-token-123');
+
+    const bypassUrls = [
+      '/api/auth/login',
+      '/api/setup/status',
+      '/api/setup/complete',
+      '/api/settings/public'
+    ];
+
+    bypassUrls.forEach(url => {
+      httpClient.get(url).subscribe();
+      const req = httpMock.expectOne(url);
+      expect(req.request.headers.has('X-Session-Token')).toBeFalse();
+      req.flush({});
+    });
+  });
 });

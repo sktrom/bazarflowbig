@@ -8,9 +8,17 @@ export class SessionInterceptor implements HttpInterceptor {
   constructor(private sessionService: SessionService) {}
 
   intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    const bypassUrls = [
+      '/api/auth/login',
+      '/api/setup/status',
+      '/api/setup/complete',
+      '/api/settings/public'
+    ];
+
+    const shouldBypass = bypassUrls.some(url => req.url.includes(url));
     const sessionToken = this.sessionService.getSessionToken();
 
-    if (sessionToken) {
+    if (sessionToken && !shouldBypass) {
       const clonedReq = req.clone({
         headers: req.headers.set('X-Session-Token', sessionToken)
       });
