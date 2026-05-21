@@ -157,6 +157,52 @@ Pop-Location
 
 3. Open a browser and navigate to `http://localhost:5070`. The backend will serve the frontend UI and route all SPA paths correctly.
 
+## Windows Service Setup
+
+To host BazarFlow Backend (API and Frontend static assets in Single-Host mode) as a Windows Service, follow these steps. This setup allows the application to start automatically with Windows and run in the background without needing a user to stay logged in or keep a console window open.
+
+### 1. Build Single-Host Package First
+The Windows Service requires the Single-Host executable. Build it first using the single-host build script:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-single-host.ps1
+```
+This builds and packages both the frontend and backend to `artifacts\single-host`.
+
+### 2. Install the Service
+The installation script creates the service and configures its startup environment. Run an elevated (Administrator) PowerShell session and execute:
+```powershell
+# Set variables or let them fallback to environment defaults
+powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1 -ConnectionString "Server=localhost\SQLEXPRESS;Database=SupermarketDb;Trusted_Connection=True;TrustServerCertificate=True" -Urls "http://localhost:5070" -AllowedOrigins "http://localhost:5070" -AllowedHosts "localhost"
+```
+
+**Parameters supported by `install-service.ps1`**:
+* `-ConnectionString`: The connection string for SQL Server. If not specified, it falls back to the current shell environment variable `ConnectionStrings__DefaultConnection`.
+* `-Urls`: The hosting URLs for the service (default is `http://localhost:5070`).
+* `-AllowedOrigins`: CORS allowed origins (default is `http://localhost:5070`).
+* `-AllowedHosts`: Allowed hosts header verification (default is `localhost`).
+
+This script registers the Windows Service named **`BazarFlow.Api`** (with Display Name: **`BazarFlow Backend Service`**) configured with **Automatic (Delayed Start)**. It also writes the environment configurations to the service's registry key and automatically grants folder write permission for backups (`C:\BazarFlowBackups`) to the service's security identifier (`NT AUTHORITY\LocalService`).
+
+### 3. Service Management Scripts
+Use the following administrative scripts (running in Administrator mode) to manage the service:
+
+* **Start Service**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\start-service.ps1
+  ```
+* **Stop Service**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\stop-service.ps1
+  ```
+* **Restart Service**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\restart-service.ps1
+  ```
+* **Uninstall Service**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File scripts\uninstall-service.ps1
+  ```
+
 ## Serve Frontend (Alternative via IIS)
 
 Serve the files in:
@@ -227,3 +273,30 @@ Verify these flows after deployment:
 - Confirm Windows Firewall allows the backend port.
 - Confirm frontend users can reach the static hosting port.
 - Confirm SQL Server remote access only when required and properly restricted.
+
+### Windows Service Failures
+
+#### Service does not start or crashes immediately
+- Open **Windows Event Viewer** -> **Windows Logs** -> **Application** to view the runtime exceptions.
+- Check if `artifacts\single-host\Supermarket.Api.exe` exists. If not, run `build-single-host.ps1`.
+- Verify the Content Root directory path. The API uses `AppContext.BaseDirectory` so configuration files (`appsettings.json`, etc.) and `wwwroot` are loaded from the service installation folder.
+
+#### Missing environment variables
+- Environment variables for the Windows Service are stored in the registry path: `HKLM:\SYSTEM\CurrentControlSet\Services\BazarFlow.Api` under the multi-string property `Environment`.
+- To inspect or fix them, run `regedit.exe`, navigate to the path, check the `Environment` value, and restart the service.
+
+#### SQL Server connection failure on startup
+- If SQL Server is installed on the same machine, the BazarFlow service might start before SQL Server is fully initialized during Windows startup.
+- The installation script configures the service with **Automatic (Delayed Start)**, which delays startup by about 2 minutes after boot to allow SQL Server to start.
+- Ensure the connection string includes `TrustServerCertificate=True` if using SSL/TLS, and that the database server allows local logins for the service account if needed.
+
+#### Port already in use
+- If you get an exception that a port is already in use, check if another process (e.g. IIS, another instance of the backend, or another service) is running on the port configured in `ASPNETCORE_URLS`.
+- Run `netstat -ano | findstr <port>` to identify the process using that port.
+
+#### Backup folder permissions
+- The Windows Service runs under the low-privilege `NT AUTHORITY\LocalService` account.
+- The `install-service.ps1` script automatically grants `LocalService` modify permission on `C:\BazarFlowBackups`. If you change the backup directory location in configuration, ensure you manually grant NTFS modify access to `NT AUTHORITY\LocalService` on the new path using:
+  ```powershell
+  icacls "C:\YourNewBackupPath" /grant "NT AUTHORITY\LocalService:(OI)(CI)M" /T /C
+  ```

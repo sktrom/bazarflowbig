@@ -5,7 +5,19 @@ using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Infrastructure;
 
-var builder = WebApplication.CreateBuilder(args);
+var options = new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+};
+
+var builder = WebApplication.CreateBuilder(options);
+
+builder.Host.UseWindowsService(opts =>
+{
+    opts.ServiceName = "BazarFlow.Api";
+});
+
 const string CorsPolicyName = "BazarFlowCorsPolicy";
 
 builder.Services.AddControllers();
