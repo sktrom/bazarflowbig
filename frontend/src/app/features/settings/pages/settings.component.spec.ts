@@ -145,6 +145,19 @@ describe('SettingsComponent', () => {
     expect(component.editEmpId).toBeNull();
   });
 
+  it('should include Purchases in allScreens and render it as a checkbox in employee modal', () => {
+    expect(component.allScreens).toContain('Purchases');
+    
+    component.openEmpCreate();
+    fixture.detectChanges();
+    
+    const compiled = fixture.nativeElement;
+    const labels = compiled.querySelectorAll('label.flex.items-center.gap-2.cursor-pointer');
+    const labelTexts = Array.from(labels).map((el: any) => el.textContent.trim());
+    
+    expect(labelTexts).toContain('Purchases');
+  });
+
   it('should load permissions when opening edit modal', () => {
     apiSpy.getEmployee.and.returnValue(of(mockDetail as any));
     component.openEmpEdit(mockEmployees[0] as any);
