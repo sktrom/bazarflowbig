@@ -110,7 +110,54 @@ artifacts\backend\Supermarket.Api.exe
 
 Do not use `dotnet run` for deployment.
 
-## Serve Frontend
+## Single-Host Mode (Recommended)
+
+In Single-Host mode, the ASP.NET Core backend hosts both the web API and the Angular frontend static files from a single process on the same port. This eliminates the need for a separate web server (like IIS) and resolves all CORS configuration issues.
+
+### Build and Package Single-Host
+
+To build and package the application in Single-Host mode, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-single-host.ps1
+```
+
+This script:
+1. Builds the Angular frontend with the production configuration.
+2. Publishes the backend Release build to `artifacts\single-host`.
+3. Copies the built frontend assets into the `wwwroot` folder inside the published backend output (`artifacts\single-host\wwwroot`).
+
+The completed package is located at:
+
+```text
+artifacts\single-host
+```
+
+### Environment Configuration in Single-Host Mode
+
+In Single-Host mode, the frontend requests API endpoints from the same origin (protocol, host, and port) where it was loaded.
+* **Frontend `environment.prod.ts`**: The `apiUrl` is set to `''` (an empty string). All requests are sent as relative paths (e.g., `/api/auth/login`).
+* **CORS Settings**: Since requests are same-origin, CORS headers are not strictly required for local frontend access, but the backend maintains its safety policy.
+* **Allowed Hosts**: Set `AllowedHosts = localhost` (or the specific local network hostname).
+
+### Running in Single-Host Mode
+
+To run the packaged application:
+1. Set the required backend environment variables.
+2. Run the executable directly from the output folder:
+
+```powershell
+Push-Location artifacts\single-host
+$env:ASPNETCORE_ENVIRONMENT = "Production"
+$env:ASPNETCORE_URLS = "http://localhost:5070"
+$env:ConnectionStrings__DefaultConnection = "<your connection string>"
+.\Supermarket.Api.exe
+Pop-Location
+```
+
+3. Open a browser and navigate to `http://localhost:5070`. The backend will serve the frontend UI and route all SPA paths correctly.
+
+## Serve Frontend (Alternative via IIS)
 
 Serve the files in:
 

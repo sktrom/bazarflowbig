@@ -71,9 +71,13 @@ app.UseHttpsRedirection();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseCors(CorsPolicyName);
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 // Passive session middleware — populates ISessionContext, never short-circuits
 app.UseMiddleware<SessionMiddleware>();
 
 app.UseAuthorization();
 app.MapControllers();
+app.MapFallbackToFile("{*path:regex(^(?i)(?!api).*$)}", "index.html");
 app.Run();
