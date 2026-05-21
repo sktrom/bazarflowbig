@@ -5,11 +5,17 @@ import { of, throwError } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
+import { SessionService } from '../../../core/services/session.service';
 
 describe('SettingsComponent', () => {
   let component: SettingsComponent;
   let fixture: ComponentFixture<SettingsComponent>;
   let apiSpy: jasmine.SpyObj<SettingsApiService>;
+  let authSpy: jasmine.SpyObj<AuthService>;
+  let sessionSpy: jasmine.SpyObj<SessionService>;
+  let routerSpy: jasmine.SpyObj<Router>;
 
   const mockEmployees = [
     { id: 1, fullName: 'Ali', username: 'ali', isActive: true, createdAt: '2024-01-01', phone: null }
@@ -27,7 +33,8 @@ describe('SettingsComponent', () => {
       'getEmployees','getEmployee','createEmployee','updateEmployee','deleteEmployee','resetPassword',
       'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings','createBackup',
       'getAuditLogs','getAuditLogsStatus','getAuditLog',
-      'getDevices','getDevice','createDevice','updateDevice','enableDevice','disableDevice','deleteDevice'
+      'getDevices','getDevice','createDevice','updateDevice','enableDevice','disableDevice','deleteDevice',
+      'getActiveSessions', 'forceCloseSession'
     ]);
     spy.getEmployees.and.returnValue(of({ items: mockEmployees }));
     spy.getCategories.and.returnValue(of({ items: [] }));
@@ -42,13 +49,30 @@ describe('SettingsComponent', () => {
     spy.enableDevice.and.returnValue(of({ success: true, message: 'Device enabled' }));
     spy.disableDevice.and.returnValue(of({ success: true, message: 'Device disabled' }));
     spy.deleteDevice.and.returnValue(of({ success: true, message: 'DEVICE_DELETED' }));
+    spy.getActiveSessions.and.returnValue(of([]));
+    spy.forceCloseSession.and.returnValue(of({}));
+
+    const authServiceSpy = jasmine.createSpyObj('AuthService', ['setAuthenticated', 'isLoggedIn', 'logout']);
+    const sessionServiceSpy = jasmine.createSpyObj('SessionService', ['getSessionId', 'clearSession']);
+    const routerServiceSpy = jasmine.createSpyObj('Router', ['navigate']);
+
+    sessionServiceSpy.getSessionId.and.returnValue('100');
 
     await TestBed.configureTestingModule({
       imports: [SettingsComponent, FormsModule],
-      providers: [{ provide: SettingsApiService, useValue: spy }]
+      providers: [
+        { provide: SettingsApiService, useValue: spy },
+        { provide: AuthService, useValue: authServiceSpy },
+        { provide: SessionService, useValue: sessionServiceSpy },
+        { provide: Router, useValue: routerServiceSpy }
+      ]
     }).compileComponents();
 
     apiSpy = TestBed.inject(SettingsApiService) as jasmine.SpyObj<SettingsApiService>;
+    authSpy = TestBed.inject(AuthService) as jasmine.SpyObj<AuthService>;
+    sessionSpy = TestBed.inject(SessionService) as jasmine.SpyObj<SessionService>;
+    routerSpy = TestBed.inject(Router) as jasmine.SpyObj<Router>;
+
     fixture = TestBed.createComponent(SettingsComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -335,5 +359,140 @@ describe('SettingsComponent', () => {
     const d = { id: 10, deviceCode: 'POS-10', deviceName: 'Counter 10', isActive: true, createdAt: '2026-05-19' };
     component.toggleDeviceActive(d);
     expect(component.toast).toBe('لا يمكن تعطيل آخر جهاز نشط');
+  });
+
+  const mockSessions = [
+    {
+      sessionId: 100,
+      employeeId: 1,
+      employeeName: 'Ali',
+      username: 'ali',
+      deviceId: 10,
+      deviceCode: 'POS-10',
+      deviceName: 'Counter 10',
+      startedAt: '2026-05-20T10:00:00Z',
+      lastSeenAt: '2026-05-21T11:00:00Z',
+      expiresAt: '2026-05-22T10:00:00Z'
+    },
+    {
+      sessionId: 200,
+      employeeId: 2,
+      employeeName: 'Omar',
+      username: 'omar',
+      deviceId: 20,
+      deviceCode: 'POS-20',
+      deviceName: 'Counter 20',
+      startedAt: '2026-05-20T11:00:00Z',
+      lastSeenAt: '2026-05-21T12:00:00Z',
+      expiresAt: '2026-05-22T11:00:00Z'
+    }
+  ];
+
+  it('should render active sessions tab', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('الجلسات النشطة');
+  });
+
+  it('should call getActiveSessions when switching to sessions tab', () => {
+    apiSpy.getActiveSessions.and.returnValue(of([]));
+    component.switchTab('sessions');
+    expect(apiSpy.getActiveSessions).toHaveBeenCalled();
+  });
+
+  it('should display active sessions list in the table', () => {
+    apiSpy.getActiveSessions.and.returnValue(of(mockSessions));
+    component.switchTab('sessions');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('Omar');
+    expect(compiled.textContent).toContain('ali');
+    expect(compiled.textContent).toContain('Counter 20');
+  });
+
+  it('should display current session badge for current session', () => {
+    sessionSpy.getSessionId.and.returnValue('100');
+    apiSpy.getActiveSessions.and.returnValue(of(mockSessions));
+    component.switchTab('sessions');
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('جلستك الحالية');
+  });
+
+  it('should show correct confirmation message for regular session force close', () => {
+    sessionSpy.getSessionId.and.returnValue('100');
+    component.openSessionCloseConfirm(mockSessions[1]); // Omar, sessionId 200
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('هل أنت متأكد من رغبتك في إغلاق هذه الجلسة فوراً؟ سيتم تسجيل خروج الموظف وقد يفقد أي بيانات غير محفوظة.');
+    expect(compiled.textContent).not.toContain('تنبيه: أنت تقوم بإغلاق جلستك الحالية');
+  });
+
+  it('should show correct warning message for current session force close', () => {
+    sessionSpy.getSessionId.and.returnValue('100');
+    component.openSessionCloseConfirm(mockSessions[0]); // Ali, sessionId 100
+    fixture.detectChanges();
+
+    const compiled = fixture.nativeElement;
+    expect(compiled.textContent).toContain('تنبيه: أنت تقوم بإغلاق جلستك الحالية. سيؤدي هذا إلى تسجيل خروجك فورًا من النظام. هل تريد الاستمرار؟');
+  });
+
+  it('should call forceCloseSession and close modal for regular session', () => {
+    component.actionSession = mockSessions[1]; // Omar, sessionId 200
+    component.activeModal = 'sessionConfirmClose';
+    apiSpy.forceCloseSession.and.returnValue(of({}));
+    apiSpy.getActiveSessions.and.returnValue(of([]));
+
+    component.confirmForceCloseSession();
+
+    expect(apiSpy.forceCloseSession).toHaveBeenCalledWith(200);
+    expect(component.activeModal).toBeNull();
+    expect(apiSpy.getActiveSessions).toHaveBeenCalled();
+    expect(component.toast).toBe('تم إغلاق الجلسة بنجاح');
+  });
+
+  it('should clear session and redirect to login on current session force close', () => {
+    sessionSpy.getSessionId.and.returnValue('100');
+    component.actionSession = mockSessions[0]; // Ali, sessionId 100
+    component.activeModal = 'sessionConfirmClose';
+    apiSpy.forceCloseSession.and.returnValue(of({}));
+
+    component.confirmForceCloseSession();
+
+    expect(apiSpy.forceCloseSession).toHaveBeenCalledWith(100);
+    expect(sessionSpy.clearSession).toHaveBeenCalled();
+    expect(authSpy.setAuthenticated).toHaveBeenCalledWith(false);
+    expect(routerSpy.navigate).toHaveBeenCalledWith(['/login']);
+  });
+
+  it('should map SESSION_NOT_FOUND, SESSION_NOT_ACTIVE, and NO_ACTIVE_SESSION errors', () => {
+    component.actionSession = mockSessions[1]; // Omar, sessionId 200
+    component.activeModal = 'sessionConfirmClose';
+
+    // 1. SESSION_NOT_FOUND
+    let err = new HttpErrorResponse({ error: { error: 'SESSION_NOT_FOUND' }, status: 404 });
+    apiSpy.forceCloseSession.and.returnValue(throwError(() => err));
+    component.confirmForceCloseSession();
+    expect(component.formErr).toBe('الجلسة غير موجودة');
+
+    // 2. SESSION_NOT_ACTIVE
+    err = new HttpErrorResponse({ error: { error: 'SESSION_NOT_ACTIVE' }, status: 400 });
+    apiSpy.forceCloseSession.and.returnValue(throwError(() => err));
+    component.confirmForceCloseSession();
+    expect(component.formErr).toBe('الجلسة ليست نشطة');
+
+    // 3. NO_ACTIVE_SESSION
+    err = new HttpErrorResponse({ error: { error: 'NO_ACTIVE_SESSION' }, status: 400 });
+    apiSpy.forceCloseSession.and.returnValue(throwError(() => err));
+    component.confirmForceCloseSession();
+    expect(component.formErr).toBe('لا توجد جلسة نشطة');
+
+    // 4. Fallback
+    err = new HttpErrorResponse({ error: { error: 'UNKNOWN_ERROR' }, status: 500 });
+    apiSpy.forceCloseSession.and.returnValue(throwError(() => err));
+    component.confirmForceCloseSession();
+    expect(component.formErr).toBe('حدث خطأ أثناء إغلاق الجلسة');
   });
 });

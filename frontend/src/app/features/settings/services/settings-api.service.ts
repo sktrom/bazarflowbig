@@ -12,7 +12,8 @@ import {
   AuditLogListResponse, AuditLogDetailResponse, AuditLogStatusResponse,
   PosDeviceListItem, PosDeviceDetailsResponse,
   CreatePosDeviceRequest, UpdatePosDeviceRequest,
-  DeletePosDeviceResponse, EnableDisablePosDeviceResponse
+  DeletePosDeviceResponse, EnableDisablePosDeviceResponse,
+  ActiveSessionResponse
 } from '../models/settings.model';
 
 @Injectable({ providedIn: 'root' })
@@ -23,6 +24,7 @@ export class SettingsApiService {
   private readonly backup = `${environment.apiUrl}/api/system/backup`;
   private readonly audit = `${environment.apiUrl}/api/audit-logs`;
   private readonly dev = `${environment.apiUrl}/api/devices`;
+  private readonly sessions = `${environment.apiUrl}/api/sessions`;
 
   constructor(private http: HttpClient) {}
 
@@ -117,5 +119,14 @@ export class SettingsApiService {
 
   deleteDevice(id: number): Observable<DeletePosDeviceResponse> {
     return this.http.delete<DeletePosDeviceResponse>(`${this.dev}/${id}`);
+  }
+
+  // --- Active Sessions ---
+  getActiveSessions(): Observable<ActiveSessionResponse[]> {
+    return this.http.get<ActiveSessionResponse[]>(`${this.sessions}/active`);
+  }
+
+  forceCloseSession(sessionId: number): Observable<any> {
+    return this.http.post<any>(`${this.sessions}/${sessionId}/force-close`, {});
   }
 }

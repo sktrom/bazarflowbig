@@ -2,11 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { AuthService } from '../../../core/services/auth.service';
+import { SessionService } from '../../../core/services/session.service';
 import { SettingsApiService } from '../services/settings-api.service';
-import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, AuditLogStatusResponse, PosDeviceListItem, PosDeviceDetailsResponse } from '../models/settings.model';
+import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, AuditLogStatusResponse, PosDeviceListItem, PosDeviceDetailsResponse, ActiveSessionResponse } from '../models/settings.model';
 
-type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit' | 'devices';
-type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | 'deviceCreate' | 'deviceEdit' | 'deviceDelete' | null;
+type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit' | 'devices' | 'sessions';
+type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | 'deviceCreate' | 'deviceEdit' | 'deviceDelete' | 'sessionConfirmClose' | null;
 
 const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings'];
 
@@ -27,6 +30,9 @@ const ERR: Record<string,string> = {
   CANNOT_DISABLE_LAST_ACTIVE_DEVICE: 'لا يمكن تعطيل آخر جهاز نشط',
   LAST_ACTIVE_DEVICE: 'لا يمكن تعطيل آخر جهاز نشط',
   CANNOT_DELETE_DEFAULT_DEVICE: 'لا يمكن حذف جهاز النظام الافتراضي',
+  SESSION_NOT_FOUND: 'الجلسة غير موجودة',
+  SESSION_NOT_ACTIVE: 'الجلسة ليست نشطة',
+  NO_ACTIVE_SESSION: 'لا توجد جلسة نشطة',
 };
 
 function mapErr(e: HttpErrorResponse): string {
@@ -370,6 +376,48 @@ function mapErr(e: HttpErrorResponse): string {
           </table>
         </div>
       </div>
+
+      <!-- SESSIONS TAB -->
+      <div *ngIf="activeTab==='sessions'">
+        <div class="flex justify-between items-center mb-4">
+          <p class="text-sm text-slate-500">إدارة وإغلاق جلسات الموظفين النشطة في النظام</p>
+          <button (click)="loadActiveSessions()" class="px-4 py-2 bg-primary text-white rounded-md text-sm font-medium">🔄 تحديث</button>
+        </div>
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <table class="w-full text-sm text-right">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs">
+              <tr>
+                <th class="px-4 py-3">الموظف</th>
+                <th class="px-4 py-3">اسم المستخدم</th>
+                <th class="px-4 py-3">الجهاز</th>
+                <th class="px-4 py-3 text-center">وقت البدء</th>
+                <th class="px-4 py-3 text-center">آخر نشاط</th>
+                <th class="px-4 py-3 text-center">انتهاء الصلاحية</th>
+                <th class="px-4 py-3 text-center">إجراءات</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr *ngIf="!activeSessions.length"><td colspan="7" class="py-8 text-center text-slate-400">لا توجد جلسات نشطة حالياً</td></tr>
+              <tr *ngFor="let s of activeSessions" class="hover:bg-slate-50" [class.bg-blue-50]="isCurrentSession(s.sessionId)">
+                <td class="px-4 py-3 font-medium">
+                  {{s.employeeName}}
+                  <span *ngIf="isCurrentSession(s.sessionId)" class="mr-2 px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">جلستك الحالية</span>
+                </td>
+                <td class="px-4 py-3 text-slate-500">{{s.username}}</td>
+                <td class="px-4 py-3 text-slate-500">
+                  {{s.deviceName}} <span class="text-xs text-slate-400">({{s.deviceCode}})</span>
+                </td>
+                <td class="px-4 py-3 text-center text-slate-500">{{s.startedAt | date:'yyyy-MM-dd HH:mm:ss'}}</td>
+                <td class="px-4 py-3 text-center text-slate-500">{{s.lastSeenAt ? (s.lastSeenAt | date:'yyyy-MM-dd HH:mm:ss') : '—'}}</td>
+                <td class="px-4 py-3 text-center text-slate-500">{{s.expiresAt ? (s.expiresAt | date:'yyyy-MM-dd HH:mm:ss') : '—'}}</td>
+                <td class="px-4 py-3 text-center">
+                  <button (click)="openSessionCloseConfirm(s)" class="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-md text-xs font-medium transition duration-150">إغلاق الجلسة</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </ng-container>
   </div>
 
@@ -522,6 +570,31 @@ function mapErr(e: HttpErrorResponse): string {
         <button (click)="confirmDeleteDevice()" [disabled]="saving" class="px-4 py-2 bg-red-600 text-white rounded-md text-sm disabled:opacity-50">{{saving?'جاري...':'حذف'}}</button>
       </div>
     </div>
+
+    <!-- Session Confirm Close Modal -->
+    <div *ngIf="activeModal==='sessionConfirmClose'" class="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col">
+      <div class="px-5 py-4 border-b border-red-100 bg-red-50 font-bold text-red-800">تأكيد إغلاق الجلسة</div>
+      <div class="p-5 text-sm text-slate-700 space-y-3">
+        <div *ngIf="formErr" class="bg-red-50 text-red-600 p-3 rounded-md">{{formErr}}</div>
+        
+        <div *ngIf="isCurrentSession(actionSession?.sessionId)">
+          <p class="text-red-600 leading-relaxed font-bold">تنبيه: أنت تقوم بإغلاق جلستك الحالية. سيؤدي هذا إلى تسجيل خروجك فورًا من النظام. هل تريد الاستمرار؟</p>
+        </div>
+        <div *ngIf="!isCurrentSession(actionSession?.sessionId)">
+          <p class="leading-relaxed">هل أنت متأكد من رغبتك في إغلاق هذه الجلسة فوراً؟ سيتم تسجيل خروج الموظف وقد يفقد أي بيانات غير محفوظة.</p>
+          <div class="bg-slate-50 p-2.5 rounded border border-slate-100 mt-2 text-xs text-slate-500 space-y-1">
+            <div><strong>الموظف:</strong> {{actionSession?.employeeName}}</div>
+            <div><strong>الجهاز:</strong> {{actionSession?.deviceName}} ({{actionSession?.deviceCode}})</div>
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button (click)="closeModal()" class="px-4 py-2 border border-slate-300 rounded-md text-sm text-slate-700">إلغاء</button>
+        <button (click)="confirmForceCloseSession()" [disabled]="saving" class="px-4 py-2 bg-red-600 text-white rounded-md text-sm disabled:opacity-50">
+          {{saving ? 'جاري الإغلاق...' : 'تأكيد'}}
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast -->
@@ -539,7 +612,8 @@ export class SettingsComponent implements OnInit {
     { id: 'store' as TabType, label: 'المتجر' },
     { id: 'backup' as TabType, label: 'النسخ الاحتياطي' },
     { id: 'audit' as TabType, label: 'سجل النشاط' },
-    { id: 'devices' as TabType, label: 'الأجهزة' }
+    { id: 'devices' as TabType, label: 'الأجهزة' },
+    { id: 'sessions' as TabType, label: 'الجلسات النشطة' }
   ];
   allScreens = ALL_SCREENS;
   activeTab: TabType = 'employees';
@@ -591,7 +665,16 @@ export class SettingsComponent implements OnInit {
   actionDevice: PosDeviceListItem | null = null;
   deviceForm: any = {};
 
-  constructor(private api: SettingsApiService) {}
+  // Active sessions state
+  activeSessions: ActiveSessionResponse[] = [];
+  actionSession: ActiveSessionResponse | null = null;
+
+  constructor(
+    private api: SettingsApiService,
+    private authService: AuthService,
+    private sessionService: SessionService,
+    private router: Router
+  ) {}
 
   ngOnInit() { this.loadTab(); }
 
@@ -609,6 +692,8 @@ export class SettingsComponent implements OnInit {
       this.loadAuditLogs();
     } else if (this.activeTab === 'devices') {
       this.api.getDevices().subscribe({ next: r => { this.devices = r || []; this.loading = false; }, error: e => { this.showToast(mapErr(e)); this.loading = false; } });
+    } else if (this.activeTab === 'sessions') {
+      this.loadActiveSessions();
     } else {
       this.loading = false;
     }
@@ -799,7 +884,8 @@ export class SettingsComponent implements OnInit {
       'UPDATE_DEVICE': 'تعديل جهاز',
       'ENABLE_DEVICE': 'تفعيل جهاز',
       'DISABLE_DEVICE': 'تعطيل جهاز',
-      'DELETE_DEVICE': 'حذف جهاز'
+      'DELETE_DEVICE': 'حذف جهاز',
+      'FORCE_CLOSE_SESSION': 'إغلاق جلسة إدارياً'
     };
     return map[action] || action;
   }
@@ -930,6 +1016,58 @@ export class SettingsComponent implements OnInit {
       this.showToast('تم نسخ رمز الجهاز إلى الحافظة');
     }).catch(() => {
       this.showToast('فشل نسخ رمز الجهاز');
+    });
+  }
+
+  loadActiveSessions() {
+    this.loading = true;
+    this.api.getActiveSessions().subscribe({
+      next: r => {
+        this.activeSessions = r || [];
+        this.loading = false;
+      },
+      error: e => {
+        this.showToast(mapErr(e));
+        this.loading = false;
+      }
+    });
+  }
+
+  isCurrentSession(sessionId?: number | null): boolean {
+    if (sessionId === undefined || sessionId === null) return false;
+    const currentId = this.sessionService.getSessionId();
+    return currentId !== null && Number(currentId) === sessionId;
+  }
+
+  openSessionCloseConfirm(s: ActiveSessionResponse) {
+    this.actionSession = s;
+    this.formErr = '';
+    this.activeModal = 'sessionConfirmClose';
+  }
+
+  confirmForceCloseSession() {
+    if (!this.actionSession) return;
+    this.saving = true;
+    this.api.forceCloseSession(this.actionSession.sessionId).subscribe({
+      next: () => {
+        this.saving = false;
+        const closedSessionId = this.actionSession!.sessionId;
+        this.closeModal();
+
+        if (this.isCurrentSession(closedSessionId)) {
+          this.sessionService.clearSession();
+          this.authService.setAuthenticated(false);
+          this.router.navigate(['/login']);
+        } else {
+          this.loadActiveSessions();
+          this.showToast('تم إغلاق الجلسة بنجاح');
+        }
+      },
+      error: e => {
+        this.saving = false;
+        const defaultErr = mapErr(e);
+        this.formErr = defaultErr === 'حدث خطأ أثناء تنفيذ العملية' ? 'حدث خطأ أثناء إغلاق الجلسة' : defaultErr;
+      }
     });
   }
 

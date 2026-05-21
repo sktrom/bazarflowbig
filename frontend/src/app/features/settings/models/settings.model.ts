@@ -188,3 +188,15 @@ export interface EnableDisablePosDeviceResponse {
   message: string;
 }
 
+export interface ActiveSessionResponse {
+  sessionId: number;
+  employeeId: number;
+  employeeName: string;
+  username: string;
+  deviceId: number;
+  deviceCode: string;
+  deviceName: string;
+  startedAt: string;
+  lastSeenAt?: string | null;
+  expiresAt?: string | null;
+}
