@@ -89,6 +89,7 @@ namespace Supermarket.Application.Employees.Services
             }
 
             var fullPermissions = await _permissionRepo.GetFullPermissionsAsync(employee.Id);
+            await RecordEmployeeCreateAsync(employee, fullPermissions);
             return MapToDetailResponse(employee, fullPermissions);
         }
 
@@ -96,6 +97,29 @@ namespace Supermarket.Application.Employees.Services
         {
             var employee = await _employeeRepo.GetByIdAsync(id);
             if (employee == null) throw new InvalidOperationException("EMPLOYEE_NOT_FOUND");
+
+            var beforeEmployee = new
+            {
+                employee.FullName,
+                employee.Phone,
+                employee.IsActive
+            };
+            var permissionsBefore = request.Permissions == null
+                ? Array.Empty<string>()
+                : OrderedEnabledScreens(await _permissionRepo.GetFullPermissionsAsync(id));
+            var permissionList = new List<(int ScreenId, bool CanAccess)>();
+
+            if (request.Permissions != null)
+            {
+                foreach (var p in request.Permissions)
+                {
+                    var screenId = await _permissionRepo.GetScreenIdByKeyAsync(p.ScreenKey);
+                    if (screenId.HasValue)
+                        permissionList.Add((screenId.Value, p.CanAccess));
+                    else
+                        throw new InvalidOperationException("INVALID_SCREEN_KEY");
+                }
+            }
 
             employee.FullName = request.FullName;
             employee.Phone = request.Phone;
@@ -106,17 +130,16 @@ namespace Supermarket.Application.Employees.Services
 
             if (request.Permissions != null)
             {
-                var permissionList = new List<(int ScreenId, bool CanAccess)>();
-                foreach (var p in request.Permissions)
-                {
-                    var screenId = await _permissionRepo.GetScreenIdByKeyAsync(p.ScreenKey);
-                    if (screenId.HasValue)
-                        permissionList.Add((screenId.Value, p.CanAccess));
-                    else
-                        throw new InvalidOperationException("INVALID_SCREEN_KEY");
-                }
                 await _permissionRepo.ReplacePermissionsAsync(employee.Id, permissionList);
+
+                var permissionsAfter = OrderedEnabledScreens(request.Permissions);
+                if (!permissionsBefore.SequenceEqual(permissionsAfter, StringComparer.Ordinal))
+                {
+                    await RecordPermissionsUpdateAsync(employee, permissionsBefore, permissionsAfter);
+                }
             }
+
+            await RecordEmployeeUpdateAsync(employee, beforeEmployee);
 
             var fullPermissions = await _permissionRepo.GetFullPermissionsAsync(employee.Id);
             return MapToDetailResponse(employee, fullPermissions);
@@ -137,12 +160,14 @@ namespace Supermarket.Application.Employees.Services
                 employee.IsActive = false;
                 employee.UpdatedAt = DateTime.UtcNow;
                 await _employeeRepo.UpdateAsync(employee);
+                await RecordEmployeeDeactivateAsync(employee);
                 return new DeleteEmployeeResponse { Success = true, Action = "DEACTIVATED", Message = "Employee has related records and was deactivated instead of deleted." };
             }
             else
             {
                 await _permissionRepo.DeleteAllForEmployeeAsync(id);
                 await _employeeRepo.DeleteAsync(id);
+                await RecordEmployeeDeleteAsync(employee);
                 return new DeleteEmployeeResponse { Success = true, Action = "DELETED", Message = "Employee deleted successfully." };
             }
         }
@@ -169,6 +194,130 @@ namespace Supermarket.Application.Employees.Services
 
             return new ResetPasswordResponse { Success = true, Message = "Password reset successfully." };
         }
+
+        private async Task RecordEmployeeCreateAsync(Employee employee, IReadOnlyList<EmployeePermissionView> permissions)
+        {
+            await RecordAuditAsync(() => _auditLogService.RecordAsync(
+                "EMPLOYEE_CREATE",
+                "Employee",
+                employee.Id.ToString(),
+                EmployeeDisplayName(employee),
+                after: new
+                {
+                    employeeId = employee.Id,
+                    employee.Username,
+                    employee.FullName,
+                    employee.Phone,
+                    employee.IsActive
+                },
+                metadata: new
+                {
+                    permissionCount = permissions.Count,
+                    enabledScreens = OrderedEnabledScreens(permissions)
+                }));
+        }
+
+        private async Task RecordEmployeeUpdateAsync(Employee employee, object before)
+        {
+            await RecordAuditAsync(() => _auditLogService.RecordAsync(
+                "EMPLOYEE_UPDATE",
+                "Employee",
+                employee.Id.ToString(),
+                EmployeeDisplayName(employee),
+                before: before,
+                after: new
+                {
+                    employee.FullName,
+                    employee.Phone,
+                    employee.IsActive
+                },
+                metadata: new
+                {
+                    employeeId = employee.Id,
+                    employee.Username
+                }));
+        }
+
+        private async Task RecordPermissionsUpdateAsync(Employee employee, IReadOnlyList<string> before, IReadOnlyList<string> after)
+        {
+            await RecordAuditAsync(() => _auditLogService.RecordAsync(
+                "UPDATE_PERMISSIONS",
+                "Employee",
+                employee.Id.ToString(),
+                EmployeeDisplayName(employee),
+                before: new { enabledScreens = before },
+                after: new { enabledScreens = after },
+                metadata: new
+                {
+                    employeeId = employee.Id,
+                    employee.Username,
+                    enabledCountBefore = before.Count,
+                    enabledCountAfter = after.Count
+                }));
+        }
+
+        private async Task RecordEmployeeDeactivateAsync(Employee employee)
+        {
+            await RecordAuditAsync(() => _auditLogService.RecordAsync(
+                "EMPLOYEE_DEACTIVATE",
+                "Employee",
+                employee.Id.ToString(),
+                EmployeeDisplayName(employee),
+                before: new { isActive = true },
+                after: new { isActive = false },
+                metadata: new
+                {
+                    employeeId = employee.Id,
+                    employee.Username,
+                    employee.FullName
+                }));
+        }
+
+        private async Task RecordEmployeeDeleteAsync(Employee employee)
+        {
+            await RecordAuditAsync(() => _auditLogService.RecordAsync(
+                "EMPLOYEE_DELETE",
+                "Employee",
+                employee.Id.ToString(),
+                EmployeeDisplayName(employee),
+                before: new
+                {
+                    employeeId = employee.Id,
+                    employee.Username,
+                    employee.FullName,
+                    employee.Phone,
+                    employee.IsActive
+                }));
+        }
+
+        private static async Task RecordAuditAsync(Func<Task> record)
+        {
+            try
+            {
+                await record();
+            }
+            catch
+            {
+                // Audit logging is best-effort and must not break employee operations.
+            }
+        }
+
+        private static string EmployeeDisplayName(Employee employee)
+            => string.IsNullOrWhiteSpace(employee.Username) ? employee.FullName : employee.Username;
+
+        private static string[] OrderedEnabledScreens(IEnumerable<EmployeePermissionView> permissions)
+            => permissions
+                .Where(permission => permission.CanAccess)
+                .Select(permission => permission.ScreenKey)
+                .OrderBy(screenKey => screenKey, StringComparer.Ordinal)
+                .ToArray();
+
+        private static string[] OrderedEnabledScreens(IEnumerable<PermissionEntry> permissions)
+            => permissions
+                .Where(permission => permission.CanAccess)
+                .Select(permission => permission.ScreenKey)
+                .OrderBy(screenKey => screenKey, StringComparer.Ordinal)
+                .ToArray();
 
         private static EmployeeDetailResponse MapToDetailResponse(Employee e, IReadOnlyList<EmployeePermissionView> perms)
         {
