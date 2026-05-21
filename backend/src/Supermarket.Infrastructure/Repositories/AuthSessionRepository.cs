@@ -72,6 +72,27 @@ namespace Supermarket.Infrastructure.Repositories
             }
         }
 
+        public async Task<System.Collections.Generic.IEnumerable<CashSession>> GetActiveSessionsAsync()
+        {
+            return await _context.CashSessions
+                .AsNoTracking()
+                .Include(s => s.Employee)
+                .Include(s => s.Device)
+                .Where(s => s.Status == CashSessionStatus.Active)
+                .ToListAsync();
+        }
+
+        public async Task ForceCloseAsync(long sessionId, DateTime endedAt)
+        {
+            var session = await _context.CashSessions.FindAsync(sessionId);
+            if (session != null)
+            {
+                session.Status = CashSessionStatus.ForceClosed;
+                session.EndedAt = endedAt;
+                await _context.SaveChangesAsync();
+            }
+        }
+
         public async Task CloseAsync(long sessionId, DateTime closedAt)
         {
             var session = await _context.CashSessions.FindAsync(sessionId);

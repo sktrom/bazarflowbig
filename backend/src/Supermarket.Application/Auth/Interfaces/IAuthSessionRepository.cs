@@ -12,6 +12,8 @@ namespace Supermarket.Application.Auth.Interfaces
         Task CreateAsync(CashSession session);
         Task TouchAsync(long sessionId, System.DateTime lastSeenAt, System.DateTime expiresAt);
         Task ExpireAsync(long sessionId, System.DateTime endedAt);
+        Task<System.Collections.Generic.IEnumerable<CashSession>> GetActiveSessionsAsync();
+        Task ForceCloseAsync(long sessionId, System.DateTime endedAt);
         Task CloseAsync(long sessionId, System.DateTime closedAt);
     }
 }

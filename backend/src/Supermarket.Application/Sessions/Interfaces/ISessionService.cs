@@ -5,7 +5,8 @@ namespace Supermarket.Application.Sessions.Interfaces
 {
     public interface ISessionService
     {
-        // employeeId is taken from ISessionContext inside the service; no external parameter
         Task<SessionHistoryResponse> GetHistoryAsync(int pageIndex = 1, int pageSize = 20);
+        Task<System.Collections.Generic.IEnumerable<ActiveSessionResponse>> GetActiveSessionsAsync();
+        Task ForceCloseSessionAsync(long sessionId, long currentEmployeeId, long currentSessionId);
     }
 }
