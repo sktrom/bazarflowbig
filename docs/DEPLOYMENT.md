@@ -220,6 +220,33 @@ To create the shortcut:
 * `-ShortcutName`: The name of the shortcut file (default is `BazarFlow`).
 * `-IconPath`: Path to the brand `.ico` file (default is `packaging/assets/bazarflow-icon.ico`).
 
+## Installer Package (Inno Setup - Skeleton)
+
+A basic installer configuration file is available at `packaging/inno/bazarflow-setup.iss`. This Inno Setup script compiles into a standalone `BazarFlowSetup.exe` installer for client deployments.
+
+### What the Installer Does
+1. **Requires Admin Rights**: Forces execution with Administrator privileges (`PrivilegesRequired=admin`) to allow proper folder creation and future service setup.
+2. **Copies Files**:
+   * Extracts single-host publish artifacts to `C:\Program Files\BazarFlow` (default).
+   * Copies administration scripts (`install-service.ps1`, `uninstall-service.ps1`, etc.) to `C:\Program Files\BazarFlow\scripts`.
+   * Copies the branding icon to `C:\Program Files\BazarFlow\packaging\assets`.
+3. **Creates Shortcuts**:
+   * Adds a Start Menu shortcut under **BazarFlow** pointing to `http://localhost:5070`.
+   * Optionally adds a Desktop shortcut pointing to `http://localhost:5070` using the custom logo.
+
+### Post-Installation Service Registration
+At this stage (Phase P3A skeleton), **the installer does not install or start the Windows Service automatically**. After completing the installation wizard:
+1. Open an elevated (Administrator) PowerShell session.
+2. Run the service installation script from the installation directory:
+   ```powershell
+   cd "C:\Program Files\BazarFlow"
+   powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1 -ConnectionString "Your_SQL_Connection_String"
+   ```
+3. Start the service:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts\start-service.ps1
+   ```
+
 ## Serve Frontend (Alternative via IIS)
 
 Serve the files in:
