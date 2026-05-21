@@ -21,6 +21,8 @@ namespace Supermarket.Application.Auth.Services
         private readonly ILoginThrottleService _loginThrottleService;
         private readonly IAuditLogService _auditLogService;
         private readonly ISessionTokenGenerator _sessionTokenGenerator;
+        private readonly ISetupStateRepository _setupStateRepository;
+        private readonly IAuthPolicy _authPolicy;
 
         public AuthService(
             IEmployeeRepository employeeRepo,
@@ -31,7 +33,9 @@ namespace Supermarket.Application.Auth.Services
             ISessionContextAccessor contextAccessor,
             ILoginThrottleService loginThrottleService,
             IAuditLogService auditLogService,
-            ISessionTokenGenerator sessionTokenGenerator)
+            ISessionTokenGenerator sessionTokenGenerator,
+            ISetupStateRepository setupStateRepository,
+            IAuthPolicy authPolicy)
         {
             _employeeRepo          = employeeRepo;
             _deviceRepo            = deviceRepo;
@@ -42,11 +46,26 @@ namespace Supermarket.Application.Auth.Services
             _loginThrottleService  = loginThrottleService;
             _auditLogService       = auditLogService;
             _sessionTokenGenerator = sessionTokenGenerator;
+            _setupStateRepository  = setupStateRepository;
+            _authPolicy            = authPolicy;
         }
 
         public async Task<LoginResponse> LoginAsync(LoginRequest request)
         {
-            if (_loginThrottleService.IsThrottled(request.Username, request.DeviceCode))
+            var username = request.Username ?? string.Empty;
+            var deviceCode = request.DeviceCode ?? string.Empty;
+
+            var setupCompleted = await _setupStateRepository.IsSetupCompletedAsync();
+            if (!setupCompleted)
+                throw new InvalidOperationException("SETUP_REQUIRED");
+
+            if (string.Equals(deviceCode.Trim(), "DEFAULT_DEVICE", StringComparison.OrdinalIgnoreCase) &&
+                !_authPolicy.AllowDefaultDeviceLogin)
+            {
+                throw new InvalidOperationException("DEFAULT_DEVICE_NOT_ALLOWED");
+            }
+
+            if (_loginThrottleService.IsThrottled(username, deviceCode))
             {
                 await RecordLoginAuditAsync("LOGIN_THROTTLED", request, "LOGIN_THROTTLED", throttled: true);
                 throw new InvalidOperationException("LOGIN_THROTTLED");
@@ -54,7 +73,7 @@ namespace Supermarket.Application.Auth.Services
 
             try
             {
-                var employee = await _employeeRepo.GetByUsernameAsync(request.Username);
+                var employee = await _employeeRepo.GetByUsernameAsync(username);
                 if (employee == null)
                     throw new InvalidOperationException("EMPLOYEE_NOT_FOUND");
 
@@ -72,7 +91,7 @@ namespace Supermarket.Application.Auth.Services
                     employee.PasswordHash = updatedHash;
                 }
 
-                var device = await _deviceRepo.GetByCodeAsync(request.DeviceCode);
+                var device = await _deviceRepo.GetByCodeAsync(deviceCode);
                 if (device == null)
                     throw new InvalidOperationException("DEVICE_NOT_FOUND");
 
@@ -110,7 +129,7 @@ namespace Supermarket.Application.Auth.Services
 
                 var allowedKeys = await _permRepo.GetAllowedScreenKeysAsync(employee.Id);
 
-                _loginThrottleService.Reset(request.Username, request.DeviceCode);
+                _loginThrottleService.Reset(username, deviceCode);
                 await RecordLoginAuditAsync("LOGIN_SUCCESS", request, "SUCCESS", throttled: false);
 
                 return new LoginResponse
@@ -125,7 +144,7 @@ namespace Supermarket.Application.Auth.Services
             }
             catch (InvalidOperationException ex) when (IsUnifiedLoginFailure(ex.Message))
             {
-                _loginThrottleService.RecordFailedAttempt(request.Username, request.DeviceCode);
+                _loginThrottleService.RecordFailedAttempt(username, deviceCode);
                 await RecordLoginAuditAsync("LOGIN_FAILED", request, ex.Message, throttled: false);
                 throw new InvalidOperationException("LOGIN_FAILED");
             }

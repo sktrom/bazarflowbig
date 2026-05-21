@@ -23,6 +23,8 @@ namespace Supermarket.UnitTests.Auth
         private readonly Mock<ILoginThrottleService> _loginThrottleMock = new();
         private readonly Mock<IAuditLogService> _auditLogMock = new();
         private readonly Mock<ISessionTokenGenerator> _sessionTokenGeneratorMock = new();
+        private readonly Mock<ISetupStateRepository> _setupStateRepoMock = new();
+        private readonly Mock<IAuthPolicy> _authPolicyMock = new();
         private readonly AuthService _service;
 
         public AuthServiceTests()
@@ -36,8 +38,16 @@ namespace Supermarket.UnitTests.Auth
                 _contextAccessorMock.Object,
                 _loginThrottleMock.Object,
                 _auditLogMock.Object,
-                _sessionTokenGeneratorMock.Object);
+                _sessionTokenGeneratorMock.Object,
+                _setupStateRepoMock.Object,
+                _authPolicyMock.Object);
 
+            _setupStateRepoMock
+                .Setup(r => r.IsSetupCompletedAsync())
+                .ReturnsAsync(true);
+            _authPolicyMock
+                .Setup(p => p.AllowDefaultDeviceLogin)
+                .Returns(false);
             _loginThrottleMock
                 .Setup(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()))
                 .Returns(false);
@@ -72,6 +82,85 @@ namespace Supermarket.UnitTests.Auth
                 null,
                 It.Is<object>(metadata => !metadata.ToString()!.Contains("password", StringComparison.OrdinalIgnoreCase))),
                 Times.Once);
+        }
+
+        [Fact]
+        public async Task Login_WhenSetupCompletedFalse_ShouldReturnSetupRequiredBeforeCredentials()
+        {
+            _setupStateRepoMock
+                .Setup(r => r.IsSetupCompletedAsync())
+                .ReturnsAsync(false);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest()));
+
+            Assert.Equal("SETUP_REQUIRED", ex.Message);
+            _employeeRepoMock.Verify(r => r.GetByUsernameAsync(It.IsAny<string>()), Times.Never);
+            _passwordHasherMock.Verify(h => h.Verify(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _loginThrottleMock.Verify(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Login_WhenSetupCompletedMissing_ShouldReturnSetupRequiredBeforeSeedAdminCredentials()
+        {
+            _setupStateRepoMock
+                .Setup(r => r.IsSetupCompletedAsync())
+                .ReturnsAsync(false);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _service.LoginAsync(new LoginRequest
+                {
+                    Username = "admin",
+                    Password = "admin123",
+                    DeviceCode = "DEFAULT_DEVICE"
+                }));
+
+            Assert.Equal("SETUP_REQUIRED", ex.Message);
+            _employeeRepoMock.Verify(r => r.GetByUsernameAsync("admin"), Times.Never);
+            _deviceRepoMock.Verify(r => r.GetByCodeAsync("DEFAULT_DEVICE"), Times.Never);
+        }
+
+        [Fact]
+        public async Task Login_WithDefaultDevice_WhenPolicyDisabled_ShouldReturnDefaultDeviceNotAllowed()
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _service.LoginAsync(LoginRequest(deviceCode: "DEFAULT_DEVICE")));
+
+            Assert.Equal("DEFAULT_DEVICE_NOT_ALLOWED", ex.Message);
+            _employeeRepoMock.Verify(r => r.GetByUsernameAsync(It.IsAny<string>()), Times.Never);
+            _loginThrottleMock.Verify(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task Login_WithDefaultDevice_WhenPolicyAllows_ShouldSucceed()
+        {
+            var employee = ActiveEmployee();
+            var device = new PosDevice
+            {
+                Id = 4,
+                DeviceCode = "DEFAULT_DEVICE",
+                IsActive = true
+            };
+
+            _authPolicyMock
+                .Setup(p => p.AllowDefaultDeviceLogin)
+                .Returns(true);
+            _employeeRepoMock.Setup(r => r.GetByUsernameAsync("cashier")).ReturnsAsync(employee);
+            _deviceRepoMock.Setup(r => r.GetByCodeAsync("DEFAULT_DEVICE")).ReturnsAsync(device);
+            _sessionRepoMock.Setup(r => r.GetActiveByEmployeeIdAsync(employee.Id)).ReturnsAsync((CashSession?)null);
+            _sessionRepoMock
+                .Setup(r => r.CreateAsync(It.IsAny<CashSession>()))
+                .Callback<CashSession>(session => session.Id = 99)
+                .Returns(Task.CompletedTask);
+            _permissionRepoMock
+                .Setup(r => r.GetAllowedScreenKeysAsync(employee.Id))
+                .ReturnsAsync(new List<string> { "Sales" });
+            _passwordHasherMock
+                .Setup(h => h.Verify("password", employee.PasswordHash))
+                .Returns(PasswordVerifyResult.Valid);
+
+            var result = await _service.LoginAsync(LoginRequest(deviceCode: "DEFAULT_DEVICE"));
+
+            Assert.Equal("DEFAULT_DEVICE", result.DeviceCode);
         }
 
         [Fact]
@@ -250,13 +339,13 @@ namespace Supermarket.UnitTests.Auth
             };
         }
 
-        private static LoginRequest LoginRequest(string password = "password")
+        private static LoginRequest LoginRequest(string password = "password", string deviceCode = "POS-01")
         {
             return new LoginRequest
             {
                 Username = "cashier",
                 Password = password,
-                DeviceCode = "POS-01"
+                DeviceCode = deviceCode
             };
         }
     }

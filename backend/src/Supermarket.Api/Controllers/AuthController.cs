@@ -36,6 +36,15 @@ namespace Supermarket.Api.Controllers
 
                 if (ex.Message == "LOGIN_THROTTLED")
                     return StatusCode(429, new { error = ex.Message });
+
+                if (ex.Message == "SETUP_REQUIRED")
+                    return StatusCode(403, new { error = ex.Message });
+
+                if (ex.Message == "SETUP_STATE_INVALID")
+                    return Conflict(new { error = ex.Message });
+
+                if (ex.Message == "DEFAULT_DEVICE_NOT_ALLOWED")
+                    return StatusCode(403, new { error = ex.Message });
                     
                 if (ex.Message == "EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION")
                     return Conflict(new { error = ex.Message });

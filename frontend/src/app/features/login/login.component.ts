@@ -260,6 +260,14 @@ export class LoginComponent implements OnInit {
         this.isLoading = false;
         this.lastErrorCode = err.error?.error as string | null;
         this.apiError = this.mapApiError(err);
+
+        if (this.lastErrorCode === 'SETUP_REQUIRED') {
+          this.router.navigate(['/setup']);
+        }
+
+        if (this.lastErrorCode === 'DEFAULT_DEVICE_NOT_ALLOWED') {
+          this.showDeviceModal = true;
+        }
       }
     });
   }
@@ -289,6 +297,14 @@ export class LoginComponent implements OnInit {
 
     if (err.status === 409 && errorCode === 'EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION') {
       return 'هذا الحساب لديه جلسة نشطة بالفعل. يرجى تسجيل الخروج أولاً';
+    }
+
+    if (errorCode === 'SETUP_REQUIRED') {
+      return 'النظام يحتاج إلى الإعداد الأول.';
+    }
+
+    if (errorCode === 'DEFAULT_DEVICE_NOT_ALLOWED') {
+      return 'لا يمكن استخدام الجهاز الافتراضي بعد إعداد النظام. يرجى اختيار جهاز مخصص.';
     }
 
     if (err.status === 403) {

@@ -168,6 +168,29 @@ describe('LoginComponent', () => {
     expect(component.apiError).toBe('تم تجاوز عدد المحاولات. حاول بعد قليل.');
   });
 
+  it('should redirect to /setup on SETUP_REQUIRED', () => {
+    const err = new HttpErrorResponse({ status: 403, error: { error: 'SETUP_REQUIRED' } });
+    authApiSpy.login.and.returnValue(throwError(() => err));
+    component.loginForm.setValue({ username: 'user1', password: 'pass1' });
+
+    component.onSubmit();
+
+    expect(component.apiError).toBe('النظام يحتاج إلى الإعداد الأول.');
+    expect(routerSpy.navigate).toHaveBeenCalledWith(['/setup']);
+  });
+
+  it('should show default-device message and open change-device modal on DEFAULT_DEVICE_NOT_ALLOWED', () => {
+    const err = new HttpErrorResponse({ status: 403, error: { error: 'DEFAULT_DEVICE_NOT_ALLOWED' } });
+    authApiSpy.login.and.returnValue(throwError(() => err));
+    component.loginForm.setValue({ username: 'user1', password: 'pass1' });
+
+    component.onSubmit();
+
+    expect(component.apiError).toBe('لا يمكن استخدام الجهاز الافتراضي بعد إعداد النظام. يرجى اختيار جهاز مخصص.');
+    expect(component.showDeviceModal).toBeTrue();
+    expect(sessionServiceSpy.clearDeviceCode).not.toHaveBeenCalled();
+  });
+
   it('should keep change-device action available after generic login failure', () => {
     const err = new HttpErrorResponse({ status: 401, error: { error: 'LOGIN_FAILED' } });
     authApiSpy.login.and.returnValue(throwError(() => err));

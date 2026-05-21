@@ -59,6 +59,36 @@ namespace Supermarket.IntegrationTests.Auth
             Assert.Equal("EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION", GetError(conflict.Value!));
         }
 
+        [Fact]
+        public async Task Post_Login_SetupRequired_ReturnsForbidden()
+        {
+            _authServiceMock
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .ThrowsAsync(new InvalidOperationException("SETUP_REQUIRED"));
+            var controller = CreateController();
+
+            var result = await controller.Login(LoginRequest());
+
+            var objectResult = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(403, objectResult.StatusCode);
+            Assert.Equal("SETUP_REQUIRED", GetError(objectResult.Value!));
+        }
+
+        [Fact]
+        public async Task Post_Login_DefaultDeviceNotAllowed_ReturnsForbidden()
+        {
+            _authServiceMock
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .ThrowsAsync(new InvalidOperationException("DEFAULT_DEVICE_NOT_ALLOWED"));
+            var controller = CreateController();
+
+            var result = await controller.Login(LoginRequest());
+
+            var objectResult = Assert.IsType<ObjectResult>(result);
+            Assert.Equal(403, objectResult.StatusCode);
+            Assert.Equal("DEFAULT_DEVICE_NOT_ALLOWED", GetError(objectResult.Value!));
+        }
+
         private AuthController CreateController()
         {
             return new AuthController(_authServiceMock.Object, _sessionContextMock.Object);
