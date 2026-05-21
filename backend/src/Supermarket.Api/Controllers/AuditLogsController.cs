@@ -42,6 +42,13 @@ namespace Supermarket.Api.Controllers
             return Ok(response);
         }
 
+        [HttpGet("status")]
+        public async Task<IActionResult> GetStatus()
+        {
+            var response = await _queryService.GetStatusAsync();
+            return Ok(response);
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(long id)
         {

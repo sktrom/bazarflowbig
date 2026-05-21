@@ -16,5 +16,7 @@ namespace Supermarket.Application.AuditLogs.Interfaces
             int pageSize);
 
         Task<AuditLogDetailResponse?> GetByIdAsync(long id);
+
+        Task<AuditLogStatusResponse> GetStatusAsync();
     }
 }

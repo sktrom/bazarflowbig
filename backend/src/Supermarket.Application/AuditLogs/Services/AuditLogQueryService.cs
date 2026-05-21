@@ -86,5 +86,21 @@ namespace Supermarket.Application.AuditLogs.Services
                 UserAgent = log.UserAgent
             };
         }
+
+        public async Task<AuditLogStatusResponse> GetStatusAsync()
+        {
+            var (totalCount, oldestCreatedAt, newestCreatedAt, approximateLargeJsonCount) = 
+                await _repository.GetStatusDetailsAsync();
+
+            return new AuditLogStatusResponse
+            {
+                TotalCount = totalCount,
+                OldestCreatedAt = oldestCreatedAt,
+                NewestCreatedAt = newestCreatedAt,
+                ApproximateLargeJsonCount = approximateLargeJsonCount,
+                RecommendedRetentionDays = 180,
+                CleanupEnabled = false
+            };
+        }
     }
 }

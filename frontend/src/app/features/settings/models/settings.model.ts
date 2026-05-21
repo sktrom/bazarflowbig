@@ -136,6 +136,15 @@ export interface AuditLogDetailResponse extends AuditLogListItem {
   userAgent?: string;
 }
 
+export interface AuditLogStatusResponse {
+  totalCount: number;
+  oldestCreatedAt?: string;
+  newestCreatedAt?: string;
+  approximateLargeJsonCount: number;
+  recommendedRetentionDays: number;
+  cleanupEnabled: boolean;
+}
+
 // --- POS Devices ---
 export interface PosDeviceListItem {
   id: number;

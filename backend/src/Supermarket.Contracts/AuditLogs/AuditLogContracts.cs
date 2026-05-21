@@ -47,4 +47,15 @@ namespace Supermarket.Contracts.AuditLogs
         public string? IpAddress { get; set; }
         public string? UserAgent { get; set; }
     }
+
+    public class AuditLogStatusResponse
+    {
+        public int TotalCount { get; set; }
+        public DateTime? OldestCreatedAt { get; set; }
+        public DateTime? NewestCreatedAt { get; set; }
+        public int ApproximateLargeJsonCount { get; set; }
+        public int RecommendedRetentionDays { get; set; }
+        public bool CleanupEnabled { get; set; }
+    }
 }
+

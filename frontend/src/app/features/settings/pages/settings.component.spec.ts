@@ -4,6 +4,7 @@ import { SettingsApiService } from '../services/settings-api.service';
 import { of, throwError } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
+import { DatePipe } from '@angular/common';
 
 describe('SettingsComponent', () => {
   let component: SettingsComponent;
@@ -25,13 +26,14 @@ describe('SettingsComponent', () => {
     const spy = jasmine.createSpyObj('SettingsApiService', [
       'getEmployees','getEmployee','createEmployee','updateEmployee','deleteEmployee','resetPassword',
       'getCategories','createCategory','updateCategory','deleteCategory','getPublicSettings','createBackup',
-      'getAuditLogs','getAuditLog',
+      'getAuditLogs','getAuditLogsStatus','getAuditLog',
       'getDevices','getDevice','createDevice','updateDevice','enableDevice','disableDevice','deleteDevice'
     ]);
     spy.getEmployees.and.returnValue(of({ items: mockEmployees }));
     spy.getCategories.and.returnValue(of({ items: [] }));
     spy.getPublicSettings.and.returnValue(of({ storeName: 'Test Store', exchangeRate: 15000 }));
     spy.getAuditLogs.and.returnValue(of({ items: [], totalCount: 0, page: 1, pageSize: 50 }));
+    spy.getAuditLogsStatus.and.returnValue(of({ totalCount: 150, oldestCreatedAt: '2026-05-01T10:00:00Z', newestCreatedAt: '2026-05-21T11:00:00Z', approximateLargeJsonCount: 20, recommendedRetentionDays: 180, cleanupEnabled: false }));
     spy.getAuditLog.and.returnValue(of({ id: 1, action: 'CREATE', entityType: 'Product', createdAt: '2026-05-20T14:30:12', hasBefore: false, hasAfter: false, hasMetadata: false }));
     spy.getDevices.and.returnValue(of([]));
     spy.getDevice.and.returnValue(of({ id: 1, deviceCode: 'POS-01', deviceName: 'Register 1', isActive: true, notes: '', createdAt: '', updatedAt: '' }));
@@ -171,6 +173,22 @@ describe('SettingsComponent', () => {
     component.switchTab('audit');
     expect(component.activeTab).toBe('audit');
     expect(apiSpy.getAuditLogs).toHaveBeenCalled();
+    expect(apiSpy.getAuditLogsStatus).toHaveBeenCalled();
+  });
+
+  it('should display audit logs status card and warning message in UI', () => {
+    const datePipe = new DatePipe('en-US');
+    const expectedOldest = datePipe.transform('2026-05-01T10:00:00Z', 'yyyy-MM-dd HH:mm');
+    const expectedNewest = datePipe.transform('2026-05-21T11:00:00Z', 'yyyy-MM-dd HH:mm');
+
+    component.switchTab('audit');
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('حالة وتخزين سجلات النشاط');
+    expect(text).toContain('150');
+    expect(text).toContain(expectedOldest!);
+    expect(text).toContain(expectedNewest!);
+    expect(text).toContain('التنظيف التلقائي غير مفعّل في هذه النسخة. لا تحذف السجلات إلا بعد عمل Backup كامل للنظام.');
   });
 
   it('should load audit logs with filter params when filtered', () => {

@@ -94,5 +94,26 @@ namespace Supermarket.UnitTests.AuditLogs
 
             Assert.Null(result);
         }
+
+        [Fact]
+        public async Task GetStatusAsync_ShouldReturnMappedStatusDetails()
+        {
+            var oldest = DateTime.UtcNow.AddDays(-10);
+            var newest = DateTime.UtcNow;
+            
+            _repoMock.Setup(r => r.GetStatusDetailsAsync())
+                .ReturnsAsync((100, oldest, newest, 45));
+
+            var service = new AuditLogQueryService(_repoMock.Object);
+            var result = await service.GetStatusAsync();
+
+            Assert.NotNull(result);
+            Assert.Equal(100, result.TotalCount);
+            Assert.Equal(oldest, result.OldestCreatedAt);
+            Assert.Equal(newest, result.NewestCreatedAt);
+            Assert.Equal(45, result.ApproximateLargeJsonCount);
+            Assert.Equal(180, result.RecommendedRetentionDays);
+            Assert.False(result.CleanupEnabled);
+        }
     }
 }

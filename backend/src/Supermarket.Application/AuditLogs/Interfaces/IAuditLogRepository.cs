@@ -19,6 +19,8 @@ namespace Supermarket.Application.AuditLogs.Interfaces
             int pageSize);
 
         Task<AuditLog?> GetByIdAsync(long id);
+
+        Task<(int TotalCount, DateTime? OldestCreatedAt, DateTime? NewestCreatedAt, int ApproximateLargeJsonCount)> GetStatusDetailsAsync();
     }
 }
 

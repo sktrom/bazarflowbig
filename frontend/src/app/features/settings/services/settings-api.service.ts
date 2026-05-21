@@ -9,7 +9,7 @@ import {
   CategoryListResponse, CategoryItem,
   CreateCategoryRequest, UpdateCategoryRequest, DeleteCategoryResponse,
   PublicSettingsResponse, CreateBackupResponse,
-  AuditLogListResponse, AuditLogDetailResponse,
+  AuditLogListResponse, AuditLogDetailResponse, AuditLogStatusResponse,
   PosDeviceListItem, PosDeviceDetailsResponse,
   CreatePosDeviceRequest, UpdatePosDeviceRequest,
   DeletePosDeviceResponse, EnableDisablePosDeviceResponse
@@ -80,6 +80,10 @@ export class SettingsApiService {
   // --- Audit Logs ---
   getAuditLogs(params: any): Observable<AuditLogListResponse> {
     return this.http.get<AuditLogListResponse>(this.audit, { params });
+  }
+
+  getAuditLogsStatus(): Observable<AuditLogStatusResponse> {
+    return this.http.get<AuditLogStatusResponse>(`${this.audit}/status`);
   }
 
   getAuditLog(id: number): Observable<AuditLogDetailResponse> {

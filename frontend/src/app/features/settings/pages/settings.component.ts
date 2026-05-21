@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { SettingsApiService } from '../services/settings-api.service';
-import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, PosDeviceListItem, PosDeviceDetailsResponse } from '../models/settings.model';
+import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, AuditLogStatusResponse, PosDeviceListItem, PosDeviceDetailsResponse } from '../models/settings.model';
 
 type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit' | 'devices';
 type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | 'deviceCreate' | 'deviceEdit' | 'deviceDelete' | null;
@@ -173,6 +173,68 @@ function mapErr(e: HttpErrorResponse): string {
 
       <!-- AUDIT LOG TAB -->
       <div *ngIf="activeTab==='audit'" class="space-y-4">
+        <!-- Status and Retention Card -->
+        <div *ngIf="auditStatus" class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+            <h3 class="font-bold text-slate-800 text-sm">حالة وتخزين سجلات النشاط</h3>
+            <span class="px-2 py-0.5 text-[10px] font-semibold bg-blue-50 text-blue-600 rounded-full border border-blue-100">
+              سياسة الاحتفاظ بالبيانات
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+            <!-- Total Count -->
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <div class="text-[10px] font-medium text-slate-400">إجمالي سجلات النشاط</div>
+              <div class="text-lg font-bold text-slate-800 mt-1">{{ auditStatus.totalCount | number }}</div>
+            </div>
+
+            <!-- Oldest Record -->
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <div class="text-[10px] font-medium text-slate-400">تاريخ أقدم سجل</div>
+              <div class="text-xs font-bold text-slate-700 mt-2">
+                {{ auditStatus.oldestCreatedAt ? (auditStatus.oldestCreatedAt | date:'yyyy-MM-dd HH:mm') : '—' }}
+              </div>
+            </div>
+
+            <!-- Newest Record -->
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <div class="text-[10px] font-medium text-slate-400">تاريخ أحدث سجل</div>
+              <div class="text-xs font-bold text-slate-700 mt-2">
+                {{ auditStatus.newestCreatedAt ? (auditStatus.newestCreatedAt | date:'yyyy-MM-dd HH:mm') : '—' }}
+              </div>
+            </div>
+
+            <!-- Large JSON Count -->
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <div class="text-[10px] font-medium text-slate-400">سجلات ذات حجم كبير (JSON)</div>
+              <div class="text-lg font-bold text-slate-800 mt-1">{{ auditStatus.approximateLargeJsonCount | number }}</div>
+            </div>
+
+            <!-- Retention & Cleanup -->
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100 col-span-2 md:col-span-1">
+              <div class="text-[10px] font-medium text-slate-400">فترة الاحتفاظ الموصى بها</div>
+              <div class="text-xs font-bold text-slate-700 mt-2 flex flex-col gap-0.5">
+                <span>{{ auditStatus.recommendedRetentionDays }} يومًا</span>
+                <span class="text-[10px] text-slate-500 font-normal">
+                  التنظيف التلقائي: <strong class="text-red-500">غير مفعّل</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Warning Message -->
+          <div class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+            <svg class="w-5.5 h-5.5 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <div class="leading-relaxed">
+              <strong class="font-bold">تنبيه أمان البيانات:</strong>
+              التنظيف التلقائي غير مفعّل في هذه النسخة. لا تحذف السجلات إلا بعد عمل Backup كامل للنظام.
+            </div>
+          </div>
+        </div>
+
         <!-- Filters Card -->
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
           <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -509,6 +571,7 @@ export class SettingsComponent implements OnInit {
   // Audit logs state
   auditLogs: AuditLogListItem[] = [];
   selectedAuditLog: AuditLogDetailResponse | null = null;
+  auditStatus: AuditLogStatusResponse | null = null;
 
   // Audit log filter fields
   filterEmployeeId: number | null = null;
@@ -674,6 +737,15 @@ export class SettingsComponent implements OnInit {
     if (this.filterDateTo) {
       params.dateTo = new Date(this.filterDateTo).toISOString();
     }
+
+    this.api.getAuditLogsStatus().subscribe({
+      next: status => {
+        this.auditStatus = status;
+      },
+      error: () => {
+        // Silent fallback
+      }
+    });
 
     this.api.getAuditLogs(params).subscribe({
       next: r => {

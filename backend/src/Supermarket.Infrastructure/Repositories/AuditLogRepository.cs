@@ -81,6 +81,35 @@ namespace Supermarket.Infrastructure.Repositories
                 .Include(a => a.Employee)
                 .FirstOrDefaultAsync(a => a.Id == id);
         }
+
+        public async Task<(int TotalCount, DateTime? OldestCreatedAt, DateTime? NewestCreatedAt, int ApproximateLargeJsonCount)> GetStatusDetailsAsync()
+        {
+            var totalCount = await _context.AuditLogs.CountAsync();
+            
+            DateTime? oldestCreatedAt = null;
+            DateTime? newestCreatedAt = null;
+            
+            if (totalCount > 0)
+            {
+                oldestCreatedAt = await _context.AuditLogs
+                    .AsNoTracking()
+                    .MinAsync(a => (DateTime?)a.CreatedAt);
+                
+                newestCreatedAt = await _context.AuditLogs
+                    .AsNoTracking()
+                    .MaxAsync(a => (DateTime?)a.CreatedAt);
+            }
+
+            var approximateLargeJsonCount = await _context.AuditLogs
+                .AsNoTracking()
+                .CountAsync(a => 
+                    (a.BeforeJson != null && a.BeforeJson != "") || 
+                    (a.AfterJson != null && a.AfterJson != "") || 
+                    (a.MetadataJson != null && a.MetadataJson != "")
+                );
+
+            return (totalCount, oldestCreatedAt, newestCreatedAt, approximateLargeJsonCount);
+        }
     }
 }
 
