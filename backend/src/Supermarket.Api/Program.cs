@@ -5,10 +5,13 @@ using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.Common.Interfaces;
 using Supermarket.Infrastructure;
 
+var baseDirectory = AppContext.BaseDirectory;
+
 var options = new WebApplicationOptions
 {
     Args = args,
-    ContentRootPath = AppContext.BaseDirectory
+    ContentRootPath = baseDirectory,
+    WebRootPath = Path.Combine(baseDirectory, "wwwroot")
 };
 
 var builder = WebApplication.CreateBuilder(options);
@@ -91,5 +94,5 @@ app.UseMiddleware<SessionMiddleware>();
 
 app.UseAuthorization();
 app.MapControllers();
-app.MapFallbackToFile("{*path:regex(^(?i)(?!api).*$)}", "index.html");
+app.MapFallbackToFile("{*path:regex(^(?i)(?!api)(?!.*\\.(?:js|css|ico|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|map|json|webmanifest|html)$).*$)}", "index.html");
 app.Run();
