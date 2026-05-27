@@ -63,7 +63,7 @@ namespace Supermarket.Api.Controllers
             }
             catch (InvalidOperationException ex)
             {
-                if (ex.Message == "BARCODE_ALREADY_EXISTS") return Conflict(new { error = ex.Message });
+                if (ex.Message == "PRODUCT_BARCODE_ALREADY_EXISTS") return Conflict(new { error = ex.Message });
                 if (ex.Message == "CATEGORY_NOT_FOUND") return BadRequest(new { error = ex.Message });
                 return BadRequest(new { error = ex.Message });
             }
@@ -80,7 +80,7 @@ namespace Supermarket.Api.Controllers
             catch (InvalidOperationException ex)
             {
                 if (ex.Message == "PRODUCT_NOT_FOUND") return NotFound(new { error = ex.Message });
-                if (ex.Message == "BARCODE_ALREADY_EXISTS") return Conflict(new { error = ex.Message });
+                if (ex.Message == "PRODUCT_BARCODE_ALREADY_EXISTS") return Conflict(new { error = ex.Message });
                 if (ex.Message == "CATEGORY_NOT_FOUND") return BadRequest(new { error = ex.Message });
                 return BadRequest(new { error = ex.Message });
             }

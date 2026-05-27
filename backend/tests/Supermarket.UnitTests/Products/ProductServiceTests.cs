@@ -59,7 +59,7 @@ namespace Supermarket.UnitTests.Products
             _repoMock.Setup(r => r.GetByBarcodeAsync("12345")).ReturnsAsync(new Product());
 
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.CreateAsync(request));
-            Assert.Equal("BARCODE_ALREADY_EXISTS", exception.Message);
+            Assert.Equal("PRODUCT_BARCODE_ALREADY_EXISTS", exception.Message);
         }
 
         [Fact]
@@ -103,7 +103,23 @@ namespace Supermarket.UnitTests.Products
             _repoMock.Setup(r => r.GetByBarcodeAsync("CONFLICT")).ReturnsAsync(conflictingProduct);
 
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.UpdateAsync(1, request));
-            Assert.Equal("BARCODE_ALREADY_EXISTS", exception.Message);
+            Assert.Equal("PRODUCT_BARCODE_ALREADY_EXISTS", exception.Message);
+        }
+
+        [Fact]
+        public async Task UpdateAsync_ShouldSucceed_WhenKeepingSameBarcode()
+        {
+            var request = new UpdateProductRequest { Name = "Updated", Barcode = "12345", CategoryId = 1, BaseUnit = "pcs", IsActive = true };
+            var existingProduct = new Product { Id = 1, Name = "Old", Barcode = "12345", CategoryId = 1, BaseUnit = "pcs", IsActive = true };
+
+            _repoMock.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(existingProduct);
+
+            var result = await _service.UpdateAsync(1, request);
+
+            Assert.Equal("12345", result.Barcode);
+            Assert.Equal("Updated", result.Name);
+            _repoMock.Verify(r => r.GetByBarcodeAsync(It.IsAny<string>()), Times.Never);
+            _repoMock.Verify(r => r.UpdateAsync(existingProduct), Times.Once);
         }
 
         [Fact]

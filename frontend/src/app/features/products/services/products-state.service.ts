@@ -115,10 +115,13 @@ export class ProductsStateService {
     if (err.error && err.error.error) {
       const code = err.error.error;
       switch(code) {
+        case 'PRODUCT_BARCODE_ALREADY_EXISTS': msg = 'هذا الباركود مستخدم بالفعل'; break;
         case 'BARCODE_ALREADY_EXISTS': msg = 'الباركود موجود مسبقاً، يرجى استخدام باركود مختلف'; break;
         case 'CATEGORY_NOT_FOUND': msg = 'التصنيف غير موجود'; break;
         default: msg = code;
       }
+    } else if (err.status === 409) {
+      msg = 'هذا الباركود مستخدم بالفعل';
     } else if (err.status === 403) {
       msg = 'غير مصرح لك بإجراء هذه العملية';
     }

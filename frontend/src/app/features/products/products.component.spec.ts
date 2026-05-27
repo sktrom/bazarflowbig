@@ -89,14 +89,14 @@ describe('ProductsComponent & ProductsState', () => {
   });
 
   it('duplicate barcode error handled clearly', () => {
-    const err = new HttpErrorResponse({ status: 409, error: { error: 'BARCODE_ALREADY_EXISTS' } });
+    const err = new HttpErrorResponse({ status: 409, error: { error: 'PRODUCT_BARCODE_ALREADY_EXISTS' } });
     apiSpy.createProduct.and.returnValue(throwError(() => err));
     
     component.openCreateModal();
     component.formData = { name: 'X', barcode: '111', categoryId: 1, baseUnit: 'x', priceUsd: 1, hasCarton: false, hasExpiry: false };
     component.saveProduct();
     
-    expect(component.state.error).toContain('الباركود موجود مسبقاً');
+    expect(component.state.error).toContain('هذا الباركود مستخدم بالفعل');
     expect(component.barcodeError).toBeTrue();
   });
 

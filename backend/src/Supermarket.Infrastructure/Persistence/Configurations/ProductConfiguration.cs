@@ -20,7 +20,9 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
                 .IsRequired()
                 .HasMaxLength(100);
 
-            builder.HasIndex(p => p.Barcode).IsUnique();
+            builder.HasIndex(p => p.Barcode)
+                .IsUnique()
+                .HasDatabaseName("UX_PRODUCTS_Barcode");
 
             builder.Property(p => p.BaseUnit)
                 .IsRequired()

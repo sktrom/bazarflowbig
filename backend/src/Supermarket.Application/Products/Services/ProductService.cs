@@ -55,7 +55,7 @@ namespace Supermarket.Application.Products.Services
 
             var existing = await _repository.GetByBarcodeAsync(request.Barcode.Trim());
             if (existing != null)
-                throw new InvalidOperationException("BARCODE_ALREADY_EXISTS");
+                throw new InvalidOperationException("PRODUCT_BARCODE_ALREADY_EXISTS");
 
             var product = new Product
             {
@@ -95,7 +95,7 @@ namespace Supermarket.Application.Products.Services
             {
                 var existing = await _repository.GetByBarcodeAsync(newBarcodeTrimmed);
                 if (existing != null && existing.Id != id)
-                    throw new InvalidOperationException("BARCODE_ALREADY_EXISTS");
+                    throw new InvalidOperationException("PRODUCT_BARCODE_ALREADY_EXISTS");
                     
                 product.Barcode = newBarcodeTrimmed;
             }

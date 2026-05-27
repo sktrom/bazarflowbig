@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Update;
 using Supermarket.Application.Products.Interfaces;
 using Supermarket.Domain.Entities;
 using Supermarket.Infrastructure.Persistence;
@@ -33,15 +34,29 @@ namespace Supermarket.Infrastructure.Repositories
 
         public async Task<Product> CreateAsync(Product product)
         {
-            _context.Products.Add(product);
-            await _context.SaveChangesAsync();
-            return product;
+            try
+            {
+                _context.Products.Add(product);
+                await _context.SaveChangesAsync();
+                return product;
+            }
+            catch (DbUpdateException ex) when (IsBarcodeUniqueViolation(ex))
+            {
+                throw new System.InvalidOperationException("PRODUCT_BARCODE_ALREADY_EXISTS", ex);
+            }
         }
 
         public async Task UpdateAsync(Product product)
         {
-            _context.Products.Update(product);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.Products.Update(product);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (IsBarcodeUniqueViolation(ex))
+            {
+                throw new System.InvalidOperationException("PRODUCT_BARCODE_ALREADY_EXISTS", ex);
+            }
         }
 
         public async Task DeleteAsync(long id)
@@ -67,6 +82,15 @@ namespace Supermarket.Infrastructure.Repositories
             bool hasOffers = await _context.Set<Offer>().AnyAsync(o => o.ProductId == id);
 
             return hasBatches || hasInvoices || hasOffers;
+        }
+
+        private static bool IsBarcodeUniqueViolation(DbUpdateException ex)
+        {
+            var message = ex.InnerException?.Message ?? ex.Message;
+            return message.Contains("UX_PRODUCTS_Barcode", System.StringComparison.OrdinalIgnoreCase)
+                || message.Contains("IX_PRODUCTS_Barcode", System.StringComparison.OrdinalIgnoreCase)
+                || (message.Contains("PRODUCTS", System.StringComparison.OrdinalIgnoreCase)
+                    && message.Contains("Barcode", System.StringComparison.OrdinalIgnoreCase));
         }
     }
 }
