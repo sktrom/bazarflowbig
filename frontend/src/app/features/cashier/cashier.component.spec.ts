@@ -7,12 +7,14 @@ import { CashierStateService } from './services/cashier-state.service';
 import { CashierApiService, CartResponse, ProductDto } from './services/cashier-api.service';
 import { InvoicesApiService, InvoiceDetailsResponse } from '../invoices/services/invoices-api.service';
 import { By } from '@angular/platform-browser';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 describe('CashierComponent & CashierState', () => {
   let fixture: ComponentFixture<CashierComponent>;
   let component: CashierComponent;
   let apiSpy: jasmine.SpyObj<CashierApiService>;
   let invoicesApiSpy: jasmine.SpyObj<InvoicesApiService>;
+  let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
   let stateService: CashierStateService;
 
   const mockProducts: ProductDto[] = [
@@ -56,6 +58,7 @@ describe('CashierComponent & CashierState', () => {
       'suspendCart', 'completeCart', 'cancelCart', 'addByBarcode'
     ]);
     invoicesApiSpy = jasmine.createSpyObj('InvoicesApiService', ['getInvoiceDetails']);
+    blackBoxSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
 
     apiSpy.getCashierProducts.and.returnValue(of(mockProducts));
     apiSpy.getCurrentCart.and.returnValue(of(activeCart));
@@ -65,6 +68,7 @@ describe('CashierComponent & CashierState', () => {
       providers: [
         { provide: CashierApiService, useValue: apiSpy },
         { provide: InvoicesApiService, useValue: invoicesApiSpy },
+        { provide: BlackBoxRecorderService, useValue: blackBoxSpy },
         CashierStateService
       ]
     }).compileComponents();

@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { SessionService } from '../../core/services/session.service';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 @Component({
   selector: 'app-header',
@@ -30,7 +31,8 @@ export class HeaderComponent implements OnInit {
   constructor(
     private authService: AuthService,
     private sessionService: SessionService,
-    private router: Router
+    private router: Router,
+    private blackBox: BlackBoxRecorderService
   ) {}
 
   ngOnInit() {
@@ -41,6 +43,10 @@ export class HeaderComponent implements OnInit {
   }
 
   onLogout() {
+    this.blackBox.recordSuccess('LOGOUT', {
+      pageName: 'Shell',
+      elementKey: 'logout-button'
+    });
     this.authService.logout().subscribe(() => {
       this.router.navigate(['/login']);
     });

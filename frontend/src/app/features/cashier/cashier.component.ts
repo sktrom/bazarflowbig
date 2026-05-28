@@ -7,6 +7,7 @@ import { ProductsPaneComponent } from './components/products-pane.component';
 import { InvoicePaneComponent } from './components/invoice-pane.component';
 import { InvoicesApiService, InvoiceDetailsResponse } from '../invoices/services/invoices-api.service';
 import { ReceiptPrintComponent } from '../../shared/components/receipt-print/receipt-print.component';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 @Component({
   selector: 'app-cashier',
@@ -266,7 +267,8 @@ export class CashierComponent implements OnInit, AfterViewInit {
 
   constructor(
     public cashierState: CashierStateService,
-    private invoicesApi: InvoicesApiService
+    private invoicesApi: InvoicesApiService,
+    private blackBox: BlackBoxRecorderService
   ) {}
 
   ngOnInit(): void {
@@ -395,13 +397,29 @@ export class CashierComponent implements OnInit, AfterViewInit {
   confirmComplete() {
     this.cashierState.completeCart().subscribe({
       next: (cart) => {
+        this.blackBox.recordSuccess('COMPLETE_INVOICE', {
+          pageName: 'Cashier',
+          entityType: 'Invoice',
+          entityId: cart.invoiceId || null,
+          metadata: {
+            lineCount: cart.lines?.length || 0,
+            totalUsd: cart.totalUsd,
+            status: cart.status
+          }
+        });
         if (cart.invoiceId) {
           this.openReceiptAfterComplete(cart.invoiceId);
         } else {
           this.closeModal();
         }
       },
-      error: () => this.closeModal()
+      error: (err) => {
+        this.blackBox.recordFailure('COMPLETE_INVOICE', {
+          pageName: 'Cashier',
+          message: err?.error?.error || 'COMPLETE_INVOICE_FAILED'
+        });
+        this.closeModal();
+      }
     });
   }
 
@@ -428,6 +446,15 @@ export class CashierComponent implements OnInit, AfterViewInit {
   printReceipt() {
     if (!this.completedInvoice || this.isPrinting) return;
     this.isPrinting = true;
+    this.blackBox.recordSuccess('PRINT_RECEIPT', {
+      pageName: 'Cashier',
+      entityType: 'Invoice',
+      entityId: this.completedInvoice.invoiceId,
+      metadata: {
+        invoiceNumber: this.completedInvoice.invoiceNumber,
+        reprint: false
+      }
+    });
     window.print();
     window.setTimeout(() => this.isPrinting = false, 500);
   }

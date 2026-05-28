@@ -7,6 +7,7 @@ import { AuthApiService } from '../../core/services/auth-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { SessionService } from '../../core/services/session.service';
 import { PermissionsService } from '../../core/services/permissions.service';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 import { FormErrorComponent } from '../../shared/components/form-helpers/form-error.component';
 
 @Component({
@@ -206,7 +207,8 @@ export class LoginComponent implements OnInit {
     private authApiService: AuthApiService,
     private authService: AuthService,
     private sessionService: SessionService,
-    private permissionsService: PermissionsService
+    private permissionsService: PermissionsService,
+    private blackBox: BlackBoxRecorderService
   ) {}
 
   ngOnInit(): void {
@@ -287,6 +289,16 @@ export class LoginComponent implements OnInit {
 
         // 4. Mark authenticated
         this.authService.setAuthenticated(true);
+
+        this.blackBox.recordSuccess('LOGIN_SUCCESS', {
+          pageName: 'Login',
+          entityType: 'Employee',
+          entityId: response.employeeId,
+          metadata: {
+            username: username.trim(),
+            deviceCode: response.deviceCode
+          }
+        });
 
         // 5. Reset loading state
         this.isLoading = false;

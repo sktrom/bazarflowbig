@@ -14,6 +14,7 @@ import {
   PurchaseProductLookupItem
 } from '../models/purchase-invoice.model';
 import { PurchaseInvoicesApiService } from '../services/purchase-invoices-api.service';
+import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 
 type PurchaseModal = 'form' | 'details' | 'delete' | 'line' | 'complete' | null;
 
@@ -392,7 +393,8 @@ export class PurchasesComponent implements OnInit, OnDestroy {
 
   constructor(
     private api: PurchaseInvoicesApiService,
-    private suppliersApi: SuppliersApiService
+    private suppliersApi: SuppliersApiService,
+    private blackBox: BlackBoxRecorderService
   ) {}
 
   ngOnInit(): void {
@@ -605,6 +607,17 @@ export class PurchasesComponent implements OnInit, OnDestroy {
     this.formErr = '';
     this.api.complete(this.completeCandidate.id).subscribe({
       next: detail => {
+        this.blackBox.recordSuccess('COMPLETE_PURCHASE', {
+          pageName: 'Purchases',
+          entityType: 'PurchaseInvoice',
+          entityId: detail.id,
+          metadata: {
+            invoiceNumber: detail.invoiceNumber,
+            supplierId: detail.supplierId,
+            lineCount: detail.lines?.length || 0,
+            totalUsd: detail.totalUsd
+          }
+        });
         this.selectedInvoice = detail;
         this.completeCandidate = null;
         this.activeModal = 'details';
@@ -613,6 +626,12 @@ export class PurchasesComponent implements OnInit, OnDestroy {
         this.loadInvoices();
       },
       error: error => {
+        this.blackBox.recordFailure('COMPLETE_PURCHASE', {
+          pageName: 'Purchases',
+          entityType: 'PurchaseInvoice',
+          entityId: this.completeCandidate?.id,
+          message: error instanceof HttpErrorResponse ? error.error?.error : 'COMPLETE_PURCHASE_FAILED'
+        });
         this.formErr = this.mapError(error);
         this.actionLoading = false;
       }

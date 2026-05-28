@@ -9,6 +9,7 @@ import { AuthApiService } from '../../core/services/auth-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { SessionService } from '../../core/services/session.service';
 import { PermissionsService } from '../../core/services/permissions.service';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 describe('LoginComponent', () => {
   let component: LoginComponent;
@@ -17,6 +18,7 @@ describe('LoginComponent', () => {
   let authServiceSpy: jasmine.SpyObj<AuthService>;
   let sessionServiceSpy: jasmine.SpyObj<SessionService>;
   let permissionsServiceSpy: jasmine.SpyObj<PermissionsService>;
+  let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
   let routerSpy: jasmine.SpyObj<Router>;
   let queryParamsSubject: BehaviorSubject<any>;
 
@@ -44,6 +46,7 @@ describe('LoginComponent', () => {
       'clearDeviceCode'
     ]);
     permissionsServiceSpy = jasmine.createSpyObj('PermissionsService', ['setPermissions']);
+    blackBoxSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
     routerSpy = jasmine.createSpyObj('Router', ['navigate']);
 
     authServiceSpy.isLoggedIn.and.returnValue(false);
@@ -56,6 +59,7 @@ describe('LoginComponent', () => {
         { provide: AuthService, useValue: authServiceSpy },
         { provide: SessionService, useValue: sessionServiceSpy },
         { provide: PermissionsService, useValue: permissionsServiceSpy },
+        { provide: BlackBoxRecorderService, useValue: blackBoxSpy },
         { provide: Router, useValue: routerSpy },
         {
           provide: ActivatedRoute,
@@ -123,6 +127,24 @@ describe('LoginComponent', () => {
     component.loginForm.setValue({ username: 'user1', password: 'pass1' });
     component.onSubmit();
     expect(sessionServiceSpy.setSessionToken).toHaveBeenCalledWith('session-token-123');
+  });
+
+  it('should record successful login without password metadata', () => {
+    authApiSpy.login.and.returnValue(of(mockSuccessResponse));
+    component.loginForm.setValue({ username: 'user1', password: 'pass1' });
+    component.onSubmit();
+
+    expect(blackBoxSpy.recordSuccess).toHaveBeenCalledWith('LOGIN_SUCCESS', jasmine.objectContaining({
+      pageName: 'Login',
+      entityType: 'Employee',
+      entityId: 1,
+      metadata: jasmine.objectContaining({
+        username: 'user1',
+        deviceCode: 'DEV-01'
+      })
+    }));
+    const context = blackBoxSpy.recordSuccess.calls.mostRecent().args[1] as any;
+    expect(context.metadata.password).toBeUndefined();
   });
 
   it('should store allowedScreenKeys in PermissionsService after login', () => {

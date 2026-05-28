@@ -5,11 +5,13 @@ import { HttpErrorResponse, HttpResponse, HttpHeaders } from '@angular/common/ht
 import { ProductsComponent } from './products.component';
 import { ProductsStateService } from './services/products-state.service';
 import { ProductsApiService, ProductListResponse, CategoryListResponse, ProductDetailResponse, BatchListResponse, BatchItem } from './services/products-api.service';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 describe('ProductsComponent & ProductsState', () => {
   let fixture: ComponentFixture<ProductsComponent>;
   let component: ProductsComponent;
   let apiSpy: jasmine.SpyObj<ProductsApiService>;
+  let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
 
   const mockCategories: CategoryListResponse = { items: [{ id: 1, name: 'Cat1', isActive: true }] };
   const mockProducts: ProductListResponse = {
@@ -35,6 +37,7 @@ describe('ProductsComponent & ProductsState', () => {
       'getProducts', 'getCategoriesLookup', 'getProduct', 'createProduct', 'updateProduct', 'deleteProduct',
       'getBatches', 'createBatch', 'exportProducts'
     ]);
+    blackBoxSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
 
     apiSpy.getCategoriesLookup.and.returnValue(of(mockCategories));
     apiSpy.getProducts.and.returnValue(of(mockProducts));
@@ -43,6 +46,7 @@ describe('ProductsComponent & ProductsState', () => {
       imports: [ProductsComponent, HttpClientTestingModule],
       providers: [
         { provide: ProductsApiService, useValue: apiSpy },
+        { provide: BlackBoxRecorderService, useValue: blackBoxSpy },
         ProductsStateService
       ]
     }).compileComponents();

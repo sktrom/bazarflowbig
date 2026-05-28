@@ -5,6 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
+import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 import { SettingsApiService } from '../services/settings-api.service';
 import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, AuditLogStatusResponse, PosDeviceListItem, PosDeviceDetailsResponse, ActiveSessionResponse } from '../models/settings.model';
 
@@ -683,7 +684,8 @@ export class SettingsComponent implements OnInit {
     private api: SettingsApiService,
     private authService: AuthService,
     private sessionService: SessionService,
-    private router: Router
+    private router: Router,
+    private blackBox: BlackBoxRecorderService
   ) {}
 
   ngOnInit() { this.loadTab(); }
@@ -799,6 +801,15 @@ export class SettingsComponent implements OnInit {
       next: r => {
         this.backupLoading = false;
         this.backupResult = r;
+        this.blackBox.recordSuccess('CREATE_BACKUP', {
+          pageName: 'Settings',
+          entityType: 'SystemBackup',
+          entityId: r.fileName,
+          metadata: {
+            fileName: r.fileName,
+            sizeBytes: r.sizeBytes
+          }
+        });
       },
       error: e => {
         this.backupLoading = false;
@@ -806,6 +817,11 @@ export class SettingsComponent implements OnInit {
         this.backupError = mapped === 'حدث خطأ أثناء تنفيذ العملية'
           ? 'فشل إنشاء النسخة الاحتياطية'
           : mapped;
+        this.blackBox.recordFailure('CREATE_BACKUP', {
+          pageName: 'Settings',
+          entityType: 'SystemBackup',
+          message: e?.error?.error || 'CREATE_BACKUP_FAILED'
+        });
       }
     });
   }
@@ -1060,6 +1076,15 @@ export class SettingsComponent implements OnInit {
     this.saving = true;
     this.api.forceCloseSession(this.actionSession.sessionId).subscribe({
       next: () => {
+        this.blackBox.recordSuccess('FORCE_CLOSE_SESSION', {
+          pageName: 'Settings',
+          entityType: 'CashSession',
+          entityId: this.actionSession!.sessionId,
+          metadata: {
+            employeeId: this.actionSession!.employeeId,
+            deviceCode: this.actionSession!.deviceCode
+          }
+        });
         this.saving = false;
         const closedSessionId = this.actionSession!.sessionId;
         this.closeModal();
@@ -1074,6 +1099,12 @@ export class SettingsComponent implements OnInit {
         }
       },
       error: e => {
+        this.blackBox.recordFailure('FORCE_CLOSE_SESSION', {
+          pageName: 'Settings',
+          entityType: 'CashSession',
+          entityId: this.actionSession?.sessionId,
+          message: e?.error?.error || 'FORCE_CLOSE_SESSION_FAILED'
+        });
         this.saving = false;
         const defaultErr = mapErr(e);
         this.formErr = defaultErr === 'حدث خطأ أثناء تنفيذ العملية' ? 'حدث خطأ أثناء إغلاق الجلسة' : defaultErr;

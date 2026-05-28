@@ -8,6 +8,7 @@ import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
+import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 
 describe('SettingsComponent', () => {
   let component: SettingsComponent;
@@ -16,6 +17,7 @@ describe('SettingsComponent', () => {
   let authSpy: jasmine.SpyObj<AuthService>;
   let sessionSpy: jasmine.SpyObj<SessionService>;
   let routerSpy: jasmine.SpyObj<Router>;
+  let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
 
   const mockEmployees = [
     { id: 1, fullName: 'Ali', username: 'ali', isActive: true, createdAt: '2024-01-01', phone: null }
@@ -55,6 +57,7 @@ describe('SettingsComponent', () => {
     const authServiceSpy = jasmine.createSpyObj('AuthService', ['setAuthenticated', 'isLoggedIn', 'logout']);
     const sessionServiceSpy = jasmine.createSpyObj('SessionService', ['getSessionId', 'clearSession']);
     const routerServiceSpy = jasmine.createSpyObj('Router', ['navigate']);
+    const blackBoxServiceSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
 
     sessionServiceSpy.getSessionId.and.returnValue('100');
 
@@ -64,7 +67,8 @@ describe('SettingsComponent', () => {
         { provide: SettingsApiService, useValue: spy },
         { provide: AuthService, useValue: authServiceSpy },
         { provide: SessionService, useValue: sessionServiceSpy },
-        { provide: Router, useValue: routerServiceSpy }
+        { provide: Router, useValue: routerServiceSpy },
+        { provide: BlackBoxRecorderService, useValue: blackBoxServiceSpy }
       ]
     }).compileComponents();
 
@@ -72,6 +76,7 @@ describe('SettingsComponent', () => {
     authSpy = TestBed.inject(AuthService) as jasmine.SpyObj<AuthService>;
     sessionSpy = TestBed.inject(SessionService) as jasmine.SpyObj<SessionService>;
     routerSpy = TestBed.inject(Router) as jasmine.SpyObj<Router>;
+    blackBoxSpy = TestBed.inject(BlackBoxRecorderService) as jasmine.SpyObj<BlackBoxRecorderService>;
 
     fixture = TestBed.createComponent(SettingsComponent);
     component = fixture.componentInstance;

@@ -9,6 +9,7 @@ import {
   CreateProductRequest, 
   UpdateProductRequest 
 } from './products-api.service';
+import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 
 export interface ProductsState {
   products: ProductListItem[];
@@ -29,7 +30,10 @@ export class ProductsStateService {
   private stateSubject = new BehaviorSubject<ProductsState>(this.stateObj);
   state$ = this.stateSubject.asObservable();
 
-  constructor(private api: ProductsApiService) {}
+  constructor(
+    private api: ProductsApiService,
+    private blackBox: BlackBoxRecorderService
+  ) {}
 
   private patchState(partial: Partial<ProductsState>) {
     this.stateObj = { ...this.stateObj, ...partial };
@@ -64,9 +68,26 @@ export class ProductsStateService {
     this.patchState({ isLoading: true, error: null });
     return this.api.createProduct(request).pipe(
       tap(() => {
+        this.blackBox.recordSuccess('CREATE_PRODUCT', {
+          pageName: 'Products',
+          entityType: 'Product',
+          metadata: {
+            barcode: request.barcode,
+            categoryId: request.categoryId
+          }
+        });
         this.refreshProducts(); // reload list
       }),
       catchError(err => {
+        this.blackBox.recordFailure('CREATE_PRODUCT', {
+          pageName: 'Products',
+          entityType: 'Product',
+          message: err?.error?.error || 'CREATE_PRODUCT_FAILED',
+          metadata: {
+            barcode: request.barcode,
+            categoryId: request.categoryId
+          }
+        });
         this.handleError(err);
         this.patchState({ isLoading: false });
         throw err;
@@ -78,9 +99,29 @@ export class ProductsStateService {
     this.patchState({ isLoading: true, error: null });
     return this.api.updateProduct(id, request).pipe(
       tap(() => {
+        this.blackBox.recordSuccess('UPDATE_PRODUCT', {
+          pageName: 'Products',
+          entityType: 'Product',
+          entityId: id,
+          metadata: {
+            barcode: request.barcode,
+            categoryId: request.categoryId,
+            isActive: request.isActive
+          }
+        });
         this.refreshProducts();
       }),
       catchError(err => {
+        this.blackBox.recordFailure('UPDATE_PRODUCT', {
+          pageName: 'Products',
+          entityType: 'Product',
+          entityId: id,
+          message: err?.error?.error || 'UPDATE_PRODUCT_FAILED',
+          metadata: {
+            barcode: request.barcode,
+            categoryId: request.categoryId
+          }
+        });
         this.handleError(err);
         this.patchState({ isLoading: false });
         throw err;
@@ -92,9 +133,20 @@ export class ProductsStateService {
     this.patchState({ isLoading: true, error: null });
     return this.api.deleteProduct(id).pipe(
       tap(() => {
+        this.blackBox.recordSuccess('DELETE_PRODUCT', {
+          pageName: 'Products',
+          entityType: 'Product',
+          entityId: id
+        });
         this.refreshProducts();
       }),
       catchError(err => {
+        this.blackBox.recordFailure('DELETE_PRODUCT', {
+          pageName: 'Products',
+          entityType: 'Product',
+          entityId: id,
+          message: err?.error?.error || 'DELETE_PRODUCT_FAILED'
+        });
         this.handleError(err);
         this.patchState({ isLoading: false });
         throw err;

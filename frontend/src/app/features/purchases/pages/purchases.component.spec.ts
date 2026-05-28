@@ -10,12 +10,14 @@ import {
 } from '../models/purchase-invoice.model';
 import { PurchaseInvoicesApiService } from '../services/purchase-invoices-api.service';
 import { PurchasesComponent } from './purchases.component';
+import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 
 describe('PurchasesComponent', () => {
   let component: PurchasesComponent;
   let fixture: ComponentFixture<PurchasesComponent>;
   let apiSpy: jasmine.SpyObj<PurchaseInvoicesApiService>;
   let suppliersApiSpy: jasmine.SpyObj<SuppliersApiService>;
+  let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
 
   const invoices: PurchaseInvoiceListItem[] = [
     {
@@ -93,6 +95,7 @@ describe('PurchasesComponent', () => {
       'productsLookup'
     ]);
     suppliersApiSpy = jasmine.createSpyObj('SuppliersApiService', ['getSuppliers']);
+    blackBoxSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
 
     apiSpy.getAll.and.returnValue(of({ items: invoices }));
     apiSpy.getById.and.returnValue(of(detail));
@@ -104,7 +107,8 @@ describe('PurchasesComponent', () => {
       imports: [PurchasesComponent],
       providers: [
         { provide: PurchaseInvoicesApiService, useValue: apiSpy },
-        { provide: SuppliersApiService, useValue: suppliersApiSpy }
+        { provide: SuppliersApiService, useValue: suppliersApiSpy },
+        { provide: BlackBoxRecorderService, useValue: blackBoxSpy }
       ]
     }).compileComponents();
 
@@ -362,6 +366,11 @@ describe('PurchasesComponent', () => {
     component.confirmComplete();
 
     expect(apiSpy.complete).toHaveBeenCalledWith(1);
+    expect(blackBoxSpy.recordSuccess).toHaveBeenCalledWith('COMPLETE_PURCHASE', jasmine.objectContaining({
+      pageName: 'Purchases',
+      entityType: 'PurchaseInvoice',
+      entityId: 1
+    }));
     expect(component.selectedInvoice?.status).toBe('Completed');
     expect(component.activeModal).toBe('details');
     expect(component.toast).toBe('تم إتمام فاتورة الشراء وتحديث المخزون');

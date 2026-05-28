@@ -7,12 +7,14 @@ import { of } from 'rxjs';
 import { HttpResponse, HttpHeaders } from '@angular/common/http';
 import { RouterTestingModule } from '@angular/router/testing';
 import { By } from '@angular/platform-browser';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 describe('InvoicesComponent Export', () => {
   let component: InvoicesComponent;
   let fixture: ComponentFixture<InvoicesComponent>;
   let apiSpy: jasmine.SpyObj<InvoicesApiService>;
   let stateSpy: jasmine.SpyObj<InvoicesStateService>;
+  let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
 
   const mockDetails: InvoiceDetailsResponse = {
     invoiceId: 10,
@@ -46,6 +48,7 @@ describe('InvoicesComponent Export', () => {
 
   beforeEach(async () => {
     apiSpy = jasmine.createSpyObj('InvoicesApiService', ['exportInvoices', 'getInvoices', 'getInvoiceDetails']);
+    blackBoxSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
     stateSpy = jasmine.createSpyObj('InvoicesStateService', ['loadInvoices', 'setError'], {
       state$: of({ items: [], totalCount: 0, page: 1, pageSize: 20, isLoading: false, error: null })
     });
@@ -54,7 +57,8 @@ describe('InvoicesComponent Export', () => {
       imports: [InvoicesComponent, HttpClientTestingModule, RouterTestingModule],
       providers: [
         { provide: InvoicesApiService, useValue: apiSpy },
-        { provide: InvoicesStateService, useValue: stateSpy }
+        { provide: InvoicesStateService, useValue: stateSpy },
+        { provide: BlackBoxRecorderService, useValue: blackBoxSpy }
       ]
     }).compileComponents();
 

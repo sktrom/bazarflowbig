@@ -5,6 +5,7 @@ import { InvoicesStateService } from './services/invoices-state.service';
 import { InvoicesApiService, InvoiceListItem, InvoiceDetailsResponse, CreateAdjustmentRequest } from './services/invoices-api.service';
 import { Router } from '@angular/router';
 import { ReceiptPrintComponent } from '../../shared/components/receipt-print/receipt-print.component';
+import { BlackBoxRecorderService } from '../../core/services/black-box-recorder.service';
 
 @Component({
   selector: 'app-invoices',
@@ -358,7 +359,8 @@ export class InvoicesComponent implements OnInit {
   constructor(
     public invoicesState: InvoicesStateService,
     private api: InvoicesApiService,
-    private router: Router
+    private router: Router,
+    private blackBox: BlackBoxRecorderService
   ) {}
 
   ngOnInit(): void {
@@ -396,6 +398,15 @@ export class InvoicesComponent implements OnInit {
   printReceipt() {
     if (!this.selectedInvoice || this.isPrinting) return;
     this.isPrinting = true;
+    this.blackBox.recordSuccess('PRINT_RECEIPT', {
+      pageName: 'Invoices',
+      entityType: 'Invoice',
+      entityId: this.selectedInvoice.invoiceId,
+      metadata: {
+        invoiceNumber: this.selectedInvoice.invoiceNumber,
+        reprint: true
+      }
+    });
     window.print();
     window.setTimeout(() => this.isPrinting = false, 500);
   }
@@ -528,6 +539,15 @@ export class InvoicesComponent implements OnInit {
 
     this.api.exportInvoices(request).subscribe({
       next: (response) => {
+        this.blackBox.recordSuccess('EXPORT_INVOICES', {
+          pageName: 'Invoices',
+          metadata: {
+            status: request.status || null,
+            hasDateFrom: !!request.dateFrom,
+            hasDateTo: !!request.dateTo,
+            format: request.format
+          }
+        });
         const blob = response.body;
         if (!blob) return;
 
@@ -552,6 +572,9 @@ export class InvoicesComponent implements OnInit {
         window.URL.revokeObjectURL(url);
       },
       error: () => {
+        this.blackBox.recordFailure('EXPORT_INVOICES', {
+          pageName: 'Invoices'
+        });
         this.invoicesState.setError('فشل تصدير الفواتير');
       }
     });
