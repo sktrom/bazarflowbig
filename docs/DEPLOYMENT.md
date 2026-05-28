@@ -325,20 +325,75 @@ Migrator exit codes shown by the installer:
 | 4 | Duplicate product barcodes block migration; no data was deleted. |
 | 5 | Unexpected database preparation error. |
 
-If the migrator fails, installation stops. The installer does not delete data, reset the database, install the Windows Service, or start the application service in this phase.
+If the migrator fails, installation stops. The installer does not delete data or reset the database.
+
+### V2-02D Automated Windows Service Install + Start
+
+After the SQL wizard and successful database migration, the installer now performs the local service setup automatically:
+
+```text
+SQL Wizard -> DbMigrator -> Install Service -> Start Service -> Health Check
+```
+
+The installer runs:
+
+```text
+{app}\scripts\install-service.ps1
+{app}\scripts\start-service.ps1
+```
+
+The connection string is not passed on the PowerShell command line. The installer sets `ConnectionStrings__DefaultConnection` only as a temporary process environment variable before invoking `install-service.ps1`. The service installation script then writes the service runtime environment to the Windows Service registry key so the service can start after reboot.
+
+The installer also sets these values for the service:
+
+```text
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://localhost:{selected-port}
+Cors__AllowedOrigins__0=http://localhost:{selected-port}
+AllowedHosts=localhost
+```
+
+Before starting the service, the installer checks whether the selected local port is available. If the port is already in use, installation stops with a clear message and the database is not deleted or reset.
+
+After starting `BazarFlow.Api`, the installer verifies that the service is `Running`, then checks:
+
+```text
+http://localhost:{selected-port}/api/setup/status
+```
+
+The health check retries for a short period. If the service is running but the health check does not respond, the installer shows a warning. No database or backup files are deleted.
 
 ### Post-Installation Service Registration
-At this stage (V2-02A/B/C), **the installer does not install or start the Windows Service automatically**. After completing the installation wizard:
-1. Open an elevated (Administrator) PowerShell session.
-2. Run the service installation script from the installation directory:
+At this stage (V2-02D), the installer installs and starts the Windows Service automatically. Manual service commands are only needed for troubleshooting or advanced maintenance.
+
+To reinstall the service manually from the installation directory:
+
    ```powershell
    cd "C:\Program Files\BazarFlow"
    powershell -ExecutionPolicy Bypass -File scripts\install-service.ps1 -ConnectionString "Your_SQL_Connection_String"
    ```
-3. Start the service:
+
+To start the service manually:
+
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\start-service.ps1
    ```
+
+### Uninstall Behavior
+
+During uninstall, the installer runs:
+
+```text
+{app}\scripts\uninstall-service.ps1
+```
+
+Uninstall removes the Windows Service and application files. It does not delete:
+
+- the SQL Server database,
+- backups,
+- `C:\BazarFlowBackups`.
+
+If automatic service removal fails, the installer shows a warning. Database and backup files are still preserved.
 
 ## Serve Frontend (Alternative via IIS)
 
@@ -377,6 +432,15 @@ Verify these flows after deployment:
 - Device management.
 
 ## Troubleshooting
+
+### Installer
+
+- **SQL connection failed**: Confirm SQL Server is installed and running, the instance name is correct, and the selected authentication mode is valid.
+- **Port used**: Choose another port in the installer. Another process is already listening on the selected local port.
+- **Service install failed**: Run the installer as Administrator and check that `Supermarket.Api.exe` and the `scripts` folder exist under the installation directory.
+- **Service start failed**: Open Windows Event Viewer -> Windows Logs -> Application and inspect errors from `BazarFlow.Api`.
+- **Health check failed**: The service may still be starting. Try opening `http://localhost:{selected-port}` after a few moments, then check Event Viewer if it still does not load.
+- **Duplicate product barcode**: Resolve duplicate rows in `PRODUCTS` before running the installer again. The installer does not delete or merge data.
 
 ### SQL Connection
 

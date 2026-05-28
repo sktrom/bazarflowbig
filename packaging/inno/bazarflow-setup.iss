@@ -57,6 +57,11 @@ var
 function SetEnvironmentVariable(lpName: string; lpValue: string): Boolean;
   external 'SetEnvironmentVariableW@kernel32.dll stdcall';
 
+function Quote(Value: string): string;
+begin
+  Result := '"' + Value + '"';
+end;
+
 function IsSqlAuthentication(): Boolean;
 begin
   Result := AuthPage.SelectedValueIndex = 1;
@@ -121,6 +126,33 @@ begin
   else
     Result := 'Database initialization failed. Exit code: ' + IntToStr(ExitCode) + '.';
   end;
+end;
+
+procedure SetInstallerEnvironment();
+var
+  AppUrl: string;
+begin
+  AppUrl := GetApplicationUrl('');
+
+  if not SetEnvironmentVariable('ConnectionStrings__DefaultConnection', BuildConnectionString()) then
+  begin
+    MsgBox('Could not prepare the database connection for setup.', mbError, MB_OK);
+    RaiseException('Could not set database connection environment variable.');
+  end;
+
+  SetEnvironmentVariable('ASPNETCORE_ENVIRONMENT', 'Production');
+  SetEnvironmentVariable('ASPNETCORE_URLS', AppUrl);
+  SetEnvironmentVariable('Cors__AllowedOrigins__0', AppUrl);
+  SetEnvironmentVariable('AllowedHosts', 'localhost');
+end;
+
+procedure ClearInstallerEnvironment();
+begin
+  SetEnvironmentVariable('ConnectionStrings__DefaultConnection', '');
+  SetEnvironmentVariable('ASPNETCORE_ENVIRONMENT', '');
+  SetEnvironmentVariable('ASPNETCORE_URLS', '');
+  SetEnvironmentVariable('Cors__AllowedOrigins__0', '');
+  SetEnvironmentVariable('AllowedHosts', '');
 end;
 
 procedure InitializeWizard();
@@ -223,26 +255,147 @@ begin
     RaiseException('Database migrator was not found.');
   end;
 
-  if not SetEnvironmentVariable('ConnectionStrings__DefaultConnection', BuildConnectionString()) then
+  if not Exec(MigratorPath, '', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ExitCode) then
   begin
-    MsgBox('Could not prepare the database connection for the migrator.', mbError, MB_OK);
-    RaiseException('Could not set database connection environment variable.');
+    MsgBox('Could not start BazarFlow.DbMigrator.exe.', mbError, MB_OK);
+    RaiseException('Could not start database migrator.');
   end;
 
-  try
-    if not Exec(MigratorPath, '', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ExitCode) then
-    begin
-      MsgBox('Could not start BazarFlow.DbMigrator.exe.', mbError, MB_OK);
-      RaiseException('Could not start database migrator.');
-    end;
+  if ExitCode <> 0 then
+  begin
+    MsgBox(GetMigratorExitMessage(ExitCode), mbError, MB_OK);
+    RaiseException('Database migration failed.');
+  end;
+end;
 
-    if ExitCode <> 0 then
-    begin
-      MsgBox(GetMigratorExitMessage(ExitCode), mbError, MB_OK);
-      RaiseException('Database migration failed.');
-    end;
-  finally
-    SetEnvironmentVariable('ConnectionStrings__DefaultConnection', '');
+function RunPowerShellCommand(Command: string; var ExitCode: Integer): Boolean;
+begin
+  Result := Exec(
+    'powershell.exe',
+    '-ExecutionPolicy Bypass -NoProfile -Command ' + Quote(Command),
+    ExpandConstant('{app}'),
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ExitCode);
+end;
+
+function RunPowerShellFile(ScriptPath: string; Arguments: string; var ExitCode: Integer): Boolean;
+begin
+  Result := Exec(
+    'powershell.exe',
+    '-ExecutionPolicy Bypass -NoProfile -File ' + Quote(ScriptPath) + ' ' + Arguments,
+    ExpandConstant('{app}'),
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ExitCode);
+end;
+
+function IsApplicationPortAvailable(): Boolean;
+var
+  ExitCode: Integer;
+  Command: string;
+begin
+  Command :=
+    '$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, ' + GetApplicationPort() + '); ' +
+    'try { $listener.Start(); $listener.Stop(); exit 0 } catch { exit 1 }';
+  Result := RunPowerShellCommand(Command, ExitCode) and (ExitCode = 0);
+end;
+
+procedure InstallWindowsService();
+var
+  InstallScript: string;
+  ApiPath: string;
+  ExitCode: Integer;
+  AppUrl: string;
+  Arguments: string;
+begin
+  InstallScript := ExpandConstant('{app}\scripts\install-service.ps1');
+  ApiPath := ExpandConstant('{app}\Supermarket.Api.exe');
+  AppUrl := GetApplicationUrl('');
+
+  if not FileExists(InstallScript) then
+  begin
+    MsgBox('install-service.ps1 was not found in the installed scripts folder.', mbError, MB_OK);
+    RaiseException('Service install script was not found.');
+  end;
+
+  if not FileExists(ApiPath) then
+  begin
+    MsgBox('Supermarket.Api.exe was not found in the installation folder.', mbError, MB_OK);
+    RaiseException('Application executable was not found.');
+  end;
+
+  Arguments := '-Urls ' + Quote(AppUrl) + ' -AllowedOrigins ' + Quote(AppUrl) + ' -AllowedHosts "localhost"';
+  if (not RunPowerShellFile(InstallScript, Arguments, ExitCode)) or (ExitCode <> 0) then
+  begin
+    MsgBox('فشل تثبيت خدمة BazarFlow.', mbError, MB_OK);
+    RaiseException('BazarFlow service installation failed.');
+  end;
+end;
+
+procedure StartWindowsService();
+var
+  StartScript: string;
+  ExitCode: Integer;
+begin
+  StartScript := ExpandConstant('{app}\scripts\start-service.ps1');
+  if not FileExists(StartScript) then
+  begin
+    MsgBox('start-service.ps1 was not found in the installed scripts folder.', mbError, MB_OK);
+    RaiseException('Service start script was not found.');
+  end;
+
+  if (not RunPowerShellFile(StartScript, '', ExitCode)) or (ExitCode <> 0) then
+  begin
+    MsgBox('تم تثبيت الخدمة لكن فشل تشغيلها. راجع Event Viewer.', mbError, MB_OK);
+    RaiseException('BazarFlow service start failed.');
+  end;
+end;
+
+function IsServiceRunning(): Boolean;
+var
+  ExitCode: Integer;
+  Command: string;
+begin
+  Command := '$s = Get-Service -Name ''BazarFlow.Api'' -ErrorAction SilentlyContinue; if ($s -and $s.Status -eq ''Running'') { exit 0 } else { exit 1 }';
+  Result := RunPowerShellCommand(Command, ExitCode) and (ExitCode = 0);
+end;
+
+function RunHealthCheck(): Boolean;
+var
+  ExitCode: Integer;
+  Command: string;
+begin
+  Command :=
+    '$url = ''' + GetApplicationUrl('') + '/api/setup/status''; ' +
+    'for ($i = 0; $i -lt 10; $i++) { ' +
+    'try { $r = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 3; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) { exit 0 } } catch { } ' +
+    'Start-Sleep -Seconds 1 ' +
+    '}; exit 1';
+  Result := RunPowerShellCommand(Command, ExitCode) and (ExitCode = 0);
+end;
+
+procedure InstallAndStartService();
+begin
+  InstallWindowsService();
+
+  if not IsApplicationPortAvailable() then
+  begin
+    MsgBox('المنفذ مستخدم. اختر منفذًا آخر.', mbError, MB_OK);
+    RaiseException('Selected application port is already in use.');
+  end;
+
+  StartWindowsService();
+
+  if not IsServiceRunning() then
+  begin
+    MsgBox('تم تثبيت الخدمة لكن فشل تشغيلها. راجع Event Viewer.', mbError, MB_OK);
+    RaiseException('BazarFlow service is not running.');
+  end;
+
+  if not RunHealthCheck() then
+  begin
+    MsgBox('BazarFlow service is running, but the setup status health check did not respond. Open the shortcut after a few moments or review Event Viewer if the site does not load.', mbInformation, MB_OK);
   end;
 end;
 
@@ -250,6 +403,30 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    RunDatabaseMigrator();
+    SetInstallerEnvironment();
+    try
+      RunDatabaseMigrator();
+      InstallAndStartService();
+    finally
+      ClearInstallerEnvironment();
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  UninstallScript: string;
+  ExitCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    UninstallScript := ExpandConstant('{app}\scripts\uninstall-service.ps1');
+    if FileExists(UninstallScript) then
+    begin
+      if (not RunPowerShellFile(UninstallScript, '', ExitCode)) or (ExitCode <> 0) then
+      begin
+        MsgBox('Could not uninstall the BazarFlow Windows Service automatically. Database and backups were not deleted.', mbInformation, MB_OK);
+      end;
+    end;
   end;
 end;
