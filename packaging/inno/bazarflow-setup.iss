@@ -53,6 +53,8 @@ var
   SqlPage: TInputQueryWizardPage;
   AuthPage: TInputOptionWizardPage;
   CredentialsPage: TInputQueryWizardPage;
+  ModePage: TInputOptionWizardPage;
+  LanPage: TInputQueryWizardPage;
 
 function SetEnvironmentVariable(lpName: string; lpValue: string): Boolean;
   external 'SetEnvironmentVariableW@kernel32.dll stdcall';
@@ -65,6 +67,11 @@ end;
 function IsSqlAuthentication(): Boolean;
 begin
   Result := AuthPage.SelectedValueIndex = 1;
+end;
+
+function IsLanMode(): Boolean;
+begin
+  Result := ModePage.SelectedValueIndex = 1;
 end;
 
 function GetSqlServer(): string;
@@ -82,9 +89,71 @@ begin
   Result := Trim(SqlPage.Values[2]);
 end;
 
+function GetServerIp(): string;
+begin
+  Result := Trim(LanPage.Values[0]);
+end;
+
+function GetMachineName(): string;
+begin
+  Result := GetEnv('COMPUTERNAME');
+  if Trim(Result) = '' then
+  begin
+    Result := 'localhost';
+  end;
+end;
+
 function GetApplicationUrl(Param: string): string;
 begin
+  if IsLanMode() then
+  begin
+    Result := 'http://' + GetServerIp() + ':' + GetApplicationPort();
+  end
+  else
+  begin
+    Result := 'http://localhost:' + GetApplicationPort();
+  end;
+end;
+
+function GetLocalHealthUrl(): string;
+begin
   Result := 'http://localhost:' + GetApplicationPort();
+end;
+
+function GetServiceBindingUrl(): string;
+begin
+  if IsLanMode() then
+  begin
+    Result := 'http://0.0.0.0:' + GetApplicationPort();
+  end
+  else
+  begin
+    Result := 'http://localhost:' + GetApplicationPort();
+  end;
+end;
+
+function GetAllowedOrigins(): string;
+begin
+  if IsLanMode() then
+  begin
+    Result := 'http://' + GetServerIp() + ':' + GetApplicationPort();
+  end
+  else
+  begin
+    Result := 'http://localhost:' + GetApplicationPort();
+  end;
+end;
+
+function GetAllowedHosts(): string;
+begin
+  if IsLanMode() then
+  begin
+    Result := 'localhost;127.0.0.1;' + GetServerIp() + ';' + GetMachineName();
+  end
+  else
+  begin
+    Result := 'localhost';
+  end;
 end;
 
 function BuildConnectionString(): string;
@@ -132,7 +201,7 @@ procedure SetInstallerEnvironment();
 var
   AppUrl: string;
 begin
-  AppUrl := GetApplicationUrl('');
+  AppUrl := GetAllowedOrigins();
 
   if not SetEnvironmentVariable('ConnectionStrings__DefaultConnection', BuildConnectionString()) then
   begin
@@ -141,9 +210,9 @@ begin
   end;
 
   SetEnvironmentVariable('ASPNETCORE_ENVIRONMENT', 'Production');
-  SetEnvironmentVariable('ASPNETCORE_URLS', AppUrl);
+  SetEnvironmentVariable('ASPNETCORE_URLS', GetServiceBindingUrl());
   SetEnvironmentVariable('Cors__AllowedOrigins__0', AppUrl);
-  SetEnvironmentVariable('AllowedHosts', 'localhost');
+  SetEnvironmentVariable('AllowedHosts', GetAllowedHosts());
 end;
 
 procedure ClearInstallerEnvironment();
@@ -187,11 +256,31 @@ begin
     'The password is used only to prepare the database in this installer phase. It is not written to the installer script.');
   CredentialsPage.Add('Username:', False);
   CredentialsPage.Add('Password:', True);
+
+  ModePage := CreateInputOptionPage(
+    CredentialsPage.ID,
+    'Application Access Mode',
+    'Choose whether BazarFlow is available only on this PC or across the local network.',
+    'LAN Server mode allows other devices on the same private network to open BazarFlow in a browser. Do not expose this port to the internet.',
+    True,
+    False);
+  ModePage.Add('Local Only');
+  ModePage.Add('LAN Server');
+  ModePage.SelectedValueIndex := 0;
+
+  LanPage := CreateInputQueryPage(
+    ModePage.ID,
+    'LAN Server Address',
+    'Enter the server IP address clients should use.',
+    'Use the IPv4 address of this Server PC on the private LAN. Do not use 0.0.0.0 as the client URL.');
+  LanPage.Add('Server IP:', False);
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := (CredentialsPage <> nil) and (PageID = CredentialsPage.ID) and not IsSqlAuthentication();
+  Result :=
+    ((CredentialsPage <> nil) and (PageID = CredentialsPage.ID) and not IsSqlAuthentication()) or
+    ((LanPage <> nil) and (PageID = LanPage.ID) and not IsLanMode());
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -241,6 +330,51 @@ begin
       Exit;
     end;
   end;
+
+  if (CurPageID = LanPage.ID) and IsLanMode() then
+  begin
+    if GetServerIp() = '' then
+    begin
+      MsgBox('Server IP is required in LAN Server mode.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+
+    if GetServerIp() = '0.0.0.0' then
+    begin
+      MsgBox('0.0.0.0 is only used internally for service binding. Enter the real LAN IP address clients will open.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+function UpdateReadyMemo(
+  Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo,
+  MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+var
+  ModeName: string;
+  FirewallPlan: string;
+begin
+  if IsLanMode() then
+  begin
+    ModeName := 'LAN Server';
+    FirewallPlan := 'Create private inbound rule: BazarFlow LAN Port ' + GetApplicationPort();
+  end
+  else
+  begin
+    ModeName := 'Local Only';
+    FirewallPlan := 'Not required';
+  end;
+
+  Result :=
+    MemoDirInfo + NewLine + NewLine +
+    'BazarFlow Settings:' + NewLine +
+    Space + 'Mode: ' + ModeName + NewLine +
+    Space + 'Port: ' + GetApplicationPort() + NewLine +
+    Space + 'Service Binding URL: ' + GetServiceBindingUrl() + NewLine +
+    Space + 'Client URL: ' + GetApplicationUrl('') + NewLine +
+    Space + 'Firewall: ' + FirewallPlan;
 end;
 
 procedure RunDatabaseMigrator();
@@ -311,7 +445,7 @@ var
 begin
   InstallScript := ExpandConstant('{app}\scripts\install-service.ps1');
   ApiPath := ExpandConstant('{app}\Supermarket.Api.exe');
-  AppUrl := GetApplicationUrl('');
+  AppUrl := GetAllowedOrigins();
 
   if not FileExists(InstallScript) then
   begin
@@ -325,11 +459,32 @@ begin
     RaiseException('Application executable was not found.');
   end;
 
-  Arguments := '-Urls ' + Quote(AppUrl) + ' -AllowedOrigins ' + Quote(AppUrl) + ' -AllowedHosts "localhost"';
+  Arguments := '-Urls ' + Quote(GetServiceBindingUrl()) + ' -AllowedOrigins ' + Quote(AppUrl) + ' -AllowedHosts ' + Quote(GetAllowedHosts());
   if (not RunPowerShellFile(InstallScript, Arguments, ExitCode)) or (ExitCode <> 0) then
   begin
     MsgBox('فشل تثبيت خدمة BazarFlow.', mbError, MB_OK);
     RaiseException('BazarFlow service installation failed.');
+  end;
+end;
+
+procedure CreateLanFirewallRule();
+var
+  ExitCode: Integer;
+  Command: string;
+begin
+  if not IsLanMode() then
+  begin
+    Exit;
+  end;
+
+  Command :=
+    '$name = ''BazarFlow LAN Port ' + GetApplicationPort() + '''; ' +
+    'Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue; ' +
+    'New-NetFirewallRule -DisplayName $name -Direction Inbound -Protocol TCP -LocalPort ' + GetApplicationPort() + ' -Action Allow -Profile Private -ErrorAction Stop | Out-Null';
+
+  if (not RunPowerShellCommand(Command, ExitCode)) or (ExitCode <> 0) then
+  begin
+    MsgBox('Could not create the Windows Firewall rule for LAN access. The service may still run locally, but client devices may be blocked until the port is allowed manually.', mbInformation, MB_OK);
   end;
 end;
 
@@ -361,18 +516,27 @@ begin
   Result := RunPowerShellCommand(Command, ExitCode) and (ExitCode = 0);
 end;
 
-function RunHealthCheck(): Boolean;
+function RunUrlHealthCheck(Url: string): Boolean;
 var
   ExitCode: Integer;
   Command: string;
 begin
   Command :=
-    '$url = ''' + GetApplicationUrl('') + '/api/setup/status''; ' +
+    '$url = ''' + Url + '/api/setup/status''; ' +
     'for ($i = 0; $i -lt 10; $i++) { ' +
     'try { $r = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 3; if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 500) { exit 0 } } catch { } ' +
     'Start-Sleep -Seconds 1 ' +
     '}; exit 1';
   Result := RunPowerShellCommand(Command, ExitCode) and (ExitCode = 0);
+end;
+
+function RunHealthCheck(): Boolean;
+begin
+  Result := RunUrlHealthCheck(GetLocalHealthUrl());
+  if Result and IsLanMode() then
+  begin
+    Result := RunUrlHealthCheck(GetApplicationUrl(''));
+  end;
 end;
 
 procedure InstallAndStartService();
@@ -385,6 +549,7 @@ begin
     RaiseException('Selected application port is already in use.');
   end;
 
+  CreateLanFirewallRule();
   StartWindowsService();
 
   if not IsServiceRunning() then
@@ -417,9 +582,13 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   UninstallScript: string;
   ExitCode: Integer;
+  Command: string;
 begin
   if CurUninstallStep = usUninstall then
   begin
+    Command := 'Get-NetFirewallRule -DisplayName ''BazarFlow LAN Port*'' -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue';
+    RunPowerShellCommand(Command, ExitCode);
+
     UninstallScript := ExpandConstant('{app}\scripts\uninstall-service.ps1');
     if FileExists(UninstallScript) then
     begin

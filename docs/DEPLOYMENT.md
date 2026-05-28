@@ -348,7 +348,8 @@ The installer also sets these values for the service:
 
 ```text
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://localhost:{selected-port}
+ASPNETCORE_URLS=http://localhost:{selected-port}        # Local Only
+ASPNETCORE_URLS=http://0.0.0.0:{selected-port}          # LAN Server
 Cors__AllowedOrigins__0=http://localhost:{selected-port}
 AllowedHosts=localhost
 ```
@@ -362,6 +363,34 @@ http://localhost:{selected-port}/api/setup/status
 ```
 
 The health check retries for a short period. If the service is running but the health check does not respond, the installer shows a warning. No database or backup files are deleted.
+
+### V2-03 LAN Multi-Device Mode
+
+BazarFlow supports two installer access modes:
+
+- **Local Only**: BazarFlow opens only on the Server PC at `http://localhost:{selected-port}`.
+- **LAN Server**: BazarFlow listens on the Server PC network interfaces and client devices on the same private LAN open `http://SERVER-IP:{selected-port}`.
+
+Only the Server PC should run the full installer. Client PCs do not need SQL Server, the backend service, or database migrations. They only need a browser or a shortcut to the Server PC URL.
+
+LAN Server installer settings:
+
+- Service binding: `http://0.0.0.0:{selected-port}`.
+- Client URL: `http://<server-ip>:{selected-port}`.
+- `AllowedHosts`: `localhost;127.0.0.1;<server-ip>;<machine-name>`.
+- CORS allowed origin: at least `http://<server-ip>:{selected-port}`.
+- Windows Firewall rule: `BazarFlow LAN Port {selected-port}`, inbound TCP, Private profile.
+
+Do not use `0.0.0.0` in client browsers. It is only the service binding address. Use the Server PC LAN IPv4 address shown by Windows network settings or `ipconfig`.
+
+Security notes:
+
+- LAN Server mode is for trusted private networks only.
+- Do not configure router port forwarding to expose BazarFlow to the public internet.
+- If Windows marks the network as Public, client access may fail. Switch the network to Private or create the firewall rule manually with equivalent restrictions.
+- HTTP is acceptable for local beta/LAN operation only. Internal HTTPS is a later deployment hardening step.
+
+If the Server PC IP changes because of DHCP, existing client shortcuts may stop working. Use a DHCP reservation/static LAN IP for the Server PC or update client shortcuts to the new IP.
 
 ### Post-Installation Service Registration
 At this stage (V2-02D), the installer installs and starts the Windows Service automatically. Manual service commands are only needed for troubleshooting or advanced maintenance.
@@ -437,6 +466,9 @@ Verify these flows after deployment:
 
 - **SQL connection failed**: Confirm SQL Server is installed and running, the instance name is correct, and the selected authentication mode is valid.
 - **Port used**: Choose another port in the installer. Another process is already listening on the selected local port.
+- **Cannot access from client PC**: Confirm LAN Server mode was selected, the client URL uses the Server PC IP, both devices are on the same private network, and Windows Firewall allows `BazarFlow LAN Port {port}`.
+- **IP changed**: Update shortcuts to the new Server PC IP, or configure a static IP/DHCP reservation for the Server PC.
+- **Public network profile**: Windows may block inbound LAN traffic. Change the network profile to Private or add a restricted inbound firewall rule manually.
 - **Service install failed**: Run the installer as Administrator and check that `Supermarket.Api.exe` and the `scripts` folder exist under the installation directory.
 - **Service start failed**: Open Windows Event Viewer -> Windows Logs -> Application and inspect errors from `BazarFlow.Api`.
 - **Health check failed**: The service may still be starting. Try opening `http://localhost:{selected-port}` after a few moments, then check Event Viewer if it still does not load.
