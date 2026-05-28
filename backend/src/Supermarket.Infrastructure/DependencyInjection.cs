@@ -19,6 +19,7 @@ using Supermarket.Application.Reports.Interfaces;
 using Supermarket.Application.Suppliers.Interfaces;
 using Supermarket.Application.PurchaseInvoices.Interfaces;
 using Supermarket.Application.SystemMaintenance.Interfaces;
+using Supermarket.Application.BlackBox.Interfaces;
 using Supermarket.Infrastructure.Persistence;
 using Supermarket.Infrastructure.Repositories;
 
@@ -40,6 +41,7 @@ namespace Supermarket.Infrastructure
 
             // Repository implementations (all EF-backed)
             services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+            services.AddScoped<IBlackBoxEventRepository, BlackBoxEventRepository>();
             services.AddScoped<IEmployeeRepository, EmployeeRepository>();
             services.AddScoped<IDeviceRepository, DeviceRepository>();
             services.AddScoped<IAuthSessionRepository, AuthSessionRepository>();

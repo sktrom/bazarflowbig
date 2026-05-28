@@ -42,6 +42,8 @@ using Supermarket.Application.PurchaseInvoices.Interfaces;
 using Supermarket.Application.PurchaseInvoices.Services;
 using Supermarket.Application.SystemMaintenance.Interfaces;
 using Supermarket.Application.SystemMaintenance.Services;
+using Supermarket.Application.BlackBox.Interfaces;
+using Supermarket.Application.BlackBox.Services;
 
 namespace Supermarket.Application
 {
@@ -52,6 +54,8 @@ namespace Supermarket.Application
             // Application services only — NO EF / DbContext / Infrastructure types here
             services.AddScoped<IAuditLogService, AuditLogService>();
             services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
+            services.AddScoped<IBlackBoxMetadataSanitizer, BlackBoxMetadataSanitizer>();
+            services.AddScoped<IBlackBoxEventService, BlackBoxEventService>();
             services.AddScoped<IDeviceService, DeviceService>();
             services.AddScoped<IPasswordHasher, PasswordHasher>();
             services.AddSingleton<ISessionTokenGenerator, SessionTokenGenerator>();
