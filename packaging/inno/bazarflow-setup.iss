@@ -45,5 +45,211 @@ Source: "..\..\scripts\create-desktop-shortcut.ps1"; DestDir: "{app}\scripts"; F
 Source: "..\assets\bazarflow-icon.ico"; DestDir: "{app}\packaging\assets"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "explorer.exe"; Parameters: "http://localhost:5070"; IconFilename: "{app}\packaging\assets\bazarflow-icon.ico"; IconIndex: 0
-Name: "{commondesktop}\{#MyAppName}"; Filename: "explorer.exe"; Parameters: "http://localhost:5070"; IconFilename: "{app}\packaging\assets\bazarflow-icon.ico"; IconIndex: 0; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "explorer.exe"; Parameters: "{code:GetApplicationUrl}"; IconFilename: "{app}\packaging\assets\bazarflow-icon.ico"; IconIndex: 0
+Name: "{commondesktop}\{#MyAppName}"; Filename: "explorer.exe"; Parameters: "{code:GetApplicationUrl}"; IconFilename: "{app}\packaging\assets\bazarflow-icon.ico"; IconIndex: 0; Tasks: desktopicon
+
+[Code]
+var
+  SqlPage: TInputQueryWizardPage;
+  AuthPage: TInputOptionWizardPage;
+  CredentialsPage: TInputQueryWizardPage;
+
+function SetEnvironmentVariable(lpName: string; lpValue: string): Boolean;
+  external 'SetEnvironmentVariableW@kernel32.dll stdcall';
+
+function IsSqlAuthentication(): Boolean;
+begin
+  Result := AuthPage.SelectedValueIndex = 1;
+end;
+
+function GetSqlServer(): string;
+begin
+  Result := Trim(SqlPage.Values[0]);
+end;
+
+function GetDatabaseName(): string;
+begin
+  Result := Trim(SqlPage.Values[1]);
+end;
+
+function GetApplicationPort(): string;
+begin
+  Result := Trim(SqlPage.Values[2]);
+end;
+
+function GetApplicationUrl(Param: string): string;
+begin
+  Result := 'http://localhost:' + GetApplicationPort();
+end;
+
+function BuildConnectionString(): string;
+begin
+  if IsSqlAuthentication() then
+  begin
+    Result :=
+      'Server=' + GetSqlServer() + ';' +
+      'Database=' + GetDatabaseName() + ';' +
+      'User Id=' + Trim(CredentialsPage.Values[0]) + ';' +
+      'Password=' + CredentialsPage.Values[1] + ';' +
+      'TrustServerCertificate=True;' +
+      'Encrypt=False;';
+  end
+  else
+  begin
+    Result :=
+      'Server=' + GetSqlServer() + ';' +
+      'Database=' + GetDatabaseName() + ';' +
+      'Trusted_Connection=True;' +
+      'TrustServerCertificate=True;' +
+      'Encrypt=False;';
+  end;
+end;
+
+function GetMigratorExitMessage(ExitCode: Integer): string;
+begin
+  case ExitCode of
+    1:
+      Result := 'Database connection settings were not provided to the migrator.';
+    2:
+      Result := 'Could not connect to SQL Server. Check the server name and login details.';
+    3:
+      Result := 'Database initialization or migration failed.';
+    4:
+      Result := 'Duplicate product barcodes block this update. No data was deleted.';
+    5:
+      Result := 'An unexpected error occurred while preparing the database.';
+  else
+    Result := 'Database initialization failed. Exit code: ' + IntToStr(ExitCode) + '.';
+  end;
+end;
+
+procedure InitializeWizard();
+begin
+  SqlPage := CreateInputQueryPage(
+    wpSelectDir,
+    'Database and Application Settings',
+    'Configure the SQL Server database used by BazarFlow.',
+    'SQL Server must already be installed. The installer will prepare or update the database before finishing.');
+  SqlPage.Add('SQL Server:', False);
+  SqlPage.Add('Database name:', False);
+  SqlPage.Add('Application port:', False);
+  SqlPage.Values[0] := 'localhost\SQLEXPRESS';
+  SqlPage.Values[1] := 'BazarFlow';
+  SqlPage.Values[2] := '5070';
+
+  AuthPage := CreateInputOptionPage(
+    SqlPage.ID,
+    'Database Authentication',
+    'Choose how BazarFlow should connect to SQL Server.',
+    'Use Windows Authentication when the service account can access SQL Server. Use SQL Authentication only when a dedicated SQL login is required.',
+    True,
+    False);
+  AuthPage.Add('Windows Authentication');
+  AuthPage.Add('SQL Authentication');
+  AuthPage.SelectedValueIndex := 0;
+
+  CredentialsPage := CreateInputQueryPage(
+    AuthPage.ID,
+    'SQL Authentication Credentials',
+    'Enter the SQL login credentials.',
+    'The password is used only to prepare the database in this installer phase. It is not written to the installer script.');
+  CredentialsPage.Add('Username:', False);
+  CredentialsPage.Add('Password:', True);
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (CredentialsPage <> nil) and (PageID = CredentialsPage.ID) and not IsSqlAuthentication();
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Port: Integer;
+begin
+  Result := True;
+
+  if CurPageID = SqlPage.ID then
+  begin
+    if GetSqlServer() = '' then
+    begin
+      MsgBox('SQL Server is required.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+
+    if GetDatabaseName() = '' then
+    begin
+      MsgBox('Database name is required.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+
+    Port := StrToIntDef(GetApplicationPort(), 0);
+    if (Port < 1) or (Port > 65535) then
+    begin
+      MsgBox('Port must be a number between 1 and 65535.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+  end;
+
+  if (CurPageID = CredentialsPage.ID) and IsSqlAuthentication() then
+  begin
+    if Trim(CredentialsPage.Values[0]) = '' then
+    begin
+      MsgBox('SQL username is required.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+
+    if CredentialsPage.Values[1] = '' then
+    begin
+      MsgBox('SQL password is required.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+procedure RunDatabaseMigrator();
+var
+  MigratorPath: string;
+  ExitCode: Integer;
+begin
+  MigratorPath := ExpandConstant('{app}\tools\BazarFlow.DbMigrator.exe');
+  if not FileExists(MigratorPath) then
+  begin
+    MsgBox('BazarFlow.DbMigrator.exe was not found in the installed tools folder.', mbError, MB_OK);
+    RaiseException('Database migrator was not found.');
+  end;
+
+  if not SetEnvironmentVariable('ConnectionStrings__DefaultConnection', BuildConnectionString()) then
+  begin
+    MsgBox('Could not prepare the database connection for the migrator.', mbError, MB_OK);
+    RaiseException('Could not set database connection environment variable.');
+  end;
+
+  try
+    if not Exec(MigratorPath, '', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ExitCode) then
+    begin
+      MsgBox('Could not start BazarFlow.DbMigrator.exe.', mbError, MB_OK);
+      RaiseException('Could not start database migrator.');
+    end;
+
+    if ExitCode <> 0 then
+    begin
+      MsgBox(GetMigratorExitMessage(ExitCode), mbError, MB_OK);
+      RaiseException('Database migration failed.');
+    end;
+  finally
+    SetEnvironmentVariable('ConnectionStrings__DefaultConnection', '');
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    RunDatabaseMigrator();
+  end;
+end;

@@ -281,12 +281,54 @@ A basic installer configuration file is available at `packaging/inno/bazarflow-s
    * Extracts single-host publish artifacts to `C:\Program Files\BazarFlow` (default).
    * Copies administration scripts (`install-service.ps1`, `uninstall-service.ps1`, etc.) to `C:\Program Files\BazarFlow\scripts`.
    * Copies the branding icon to `C:\Program Files\BazarFlow\packaging\assets`.
-3. **Creates Shortcuts**:
-   * Adds a Start Menu shortcut under **BazarFlow** pointing to `http://localhost:5070`.
-   * Optionally adds a Desktop shortcut pointing to `http://localhost:5070` using the custom logo.
+3. **Collects Database Settings**:
+   * SQL Server name, database name, authentication mode, optional SQL username/password, and application port.
+4. **Runs Database Migrator**:
+   * Runs `BazarFlow.DbMigrator.exe` from the installed `tools` folder before completing installation.
+   * Passes the generated connection string through a temporary process environment variable.
+   * Does not pass the connection string on the command line and does not write it to a permanent installer file.
+5. **Creates Shortcuts**:
+   * Adds a Start Menu shortcut under **BazarFlow** pointing to `http://localhost:{selected-port}`.
+   * Optionally adds a Desktop shortcut pointing to `http://localhost:{selected-port}` using the custom logo.
+
+### V2-02 Installer SQL Wizard + DbMigrator
+
+The installer now prepares or updates the database through the Database Migrator. SQL Server is still a prerequisite and is not installed automatically.
+
+Wizard fields:
+
+- SQL Server, default `localhost\SQLEXPRESS`.
+- Database name, default `BazarFlow`.
+- Authentication mode: Windows Authentication or SQL Authentication.
+- SQL username and masked password when SQL Authentication is selected.
+- Application port, default `5070`.
+
+The installer validates required fields before database initialization. Port values must be numeric and between `1` and `65535`.
+
+Connection string formats generated at install time:
+
+```text
+Server=<server>;Database=<db>;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False;
+Server=<server>;Database=<db>;User Id=<username>;Password=<password>;TrustServerCertificate=True;Encrypt=False;
+```
+
+The generated connection string exists only in installer runtime memory and as a temporary process environment variable inherited by `BazarFlow.DbMigrator.exe`. It is not stored in the repository, not written to `.iss`, not written to a permanent config file by this installer phase, and not passed through command-line arguments.
+
+Migrator exit codes shown by the installer:
+
+| Code | Installer behavior |
+|---:|---|
+| 0 | Database is ready; installation continues. |
+| 1 | Missing migrator connection string; installation stops. |
+| 2 | SQL Server connection failed; check server and credentials. |
+| 3 | Database initialization or migration failed. |
+| 4 | Duplicate product barcodes block migration; no data was deleted. |
+| 5 | Unexpected database preparation error. |
+
+If the migrator fails, installation stops. The installer does not delete data, reset the database, install the Windows Service, or start the application service in this phase.
 
 ### Post-Installation Service Registration
-At this stage (Phase P3A skeleton), **the installer does not install or start the Windows Service automatically**. After completing the installation wizard:
+At this stage (V2-02A/B/C), **the installer does not install or start the Windows Service automatically**. After completing the installation wizard:
 1. Open an elevated (Administrator) PowerShell session.
 2. Run the service installation script from the installation directory:
    ```powershell
