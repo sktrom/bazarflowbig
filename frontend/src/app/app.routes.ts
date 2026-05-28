@@ -104,6 +104,13 @@ export const routes: Routes = [
         data: { screenKey: 'Settings' },
         loadComponent: () =>
           import('./features/settings/pages/settings.component').then(m => m.SettingsComponent)
+      },
+      {
+        path: 'black-box',
+        canActivate: [ScreenPermissionGuard],
+        data: { screenKey: 'BlackBox' },
+        loadComponent: () =>
+          import('./features/black-box/black-box.component').then(m => m.BlackBoxComponent)
       }
     ]
   },

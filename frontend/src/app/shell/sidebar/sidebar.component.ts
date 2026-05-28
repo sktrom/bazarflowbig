@@ -48,7 +48,8 @@ export class SidebarComponent implements OnInit {
     { label: 'المنتجات', route: '/products', screenKey: 'Products' },
     { label: 'العروض', route: '/offers', screenKey: 'Offers' },
     { label: 'التقارير', route: '/reports', screenKey: 'Reports' },
-    { label: 'الإعدادات', route: '/settings', screenKey: 'Settings' }
+    { label: 'الإعدادات', route: '/settings', screenKey: 'Settings' },
+    { label: 'الصندوق الأسود', route: '/black-box', screenKey: 'BlackBox' }
   ];
 
   constructor(private permissionsService: PermissionsService) {}
