@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Supermarket.Application\Supermarket.Application.csproj" />
     <ProjectReference Include="..\..\src\Supermarket.Domain\Supermarket.Domain.csproj" />
+    <ProjectReference Include="..\..\tools\BazarFlow.DbMigrator\BazarFlow.DbMigrator.csproj" />
   </ItemGroup>
 
 </Project>

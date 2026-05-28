@@ -66,11 +66,61 @@ Use real host names and origins for the deployed machine. Do not use wildcard CO
 - Do not use the `sa` account.
 - Create a dedicated SQL login or Windows account for BazarFlow, for example `bazarflow_app`.
 - Grant only the permissions needed for the application and deployment.
-- Apply migrations after configuring `ConnectionStrings__DefaultConnection`:
+- Apply migrations after configuring `ConnectionStrings__DefaultConnection`. For source-based deployments, use:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\update-database.ps1
 ```
+
+For packaged deployments without the project source or .NET SDK, use the Database Migrator described below.
+
+## Database Migrator
+
+`BazarFlow.DbMigrator` is a small console tool that prepares or updates the SQL Server database by running the same EF Core migrations used by the backend. It is intended for client machines where the source code and `dotnet ef` are not available.
+
+When `scripts\build-single-host.ps1` is used, the tool is published to:
+
+```text
+artifacts\single-host\tools\BazarFlow.DbMigrator.exe
+```
+
+Run it with a connection string:
+
+```powershell
+.\tools\BazarFlow.DbMigrator.exe --connection "<connection-string>"
+```
+
+The migrator can also read the connection string from environment variables, in this order:
+
+```text
+ConnectionStrings__DefaultConnection
+BAZARFLOW_CONNECTION_STRING
+```
+
+The tool does not print the full connection string or password. It sanitizes password and user id fields in console output. Do not paste real production secrets into shared logs or screenshots.
+
+The migrator performs these checks:
+
+1. Verifies that a connection string is provided.
+2. Opens a SQL Server connection to verify the server is reachable.
+3. If the target database already exists and `PRODUCTS` exists, checks for duplicate product barcodes before migrations.
+4. Runs `context.Database.Migrate()`.
+5. Verifies core tables exist after migration: `EMPLOYEES`, `APP_SCREENS`, `PRODUCTS`, `CASH_SESSIONS`, `SUPPLIERS`, `PURCHASE_INVOICES`.
+
+Exit codes:
+
+| Code | Meaning |
+|---:|---|
+| 0 | Success. Database is ready. |
+| 1 | Missing connection string. |
+| 2 | SQL Server connection failed. |
+| 3 | Migration failed or readiness checks failed. |
+| 4 | Duplicate product barcodes block migration, including the unique barcode index migration. |
+| 5 | Unexpected error. |
+
+If exit code `4` is returned, the migrator prints up to the first 20 duplicate barcodes and counts. It does not delete, merge, or modify product data. Resolve the duplicates manually before rerunning migrations.
+
+The migrator does not reset, drop, or seed the database. Installer automation and SQL Server installation are separate future steps. A self-contained publish can be added later if the target machine should not need a .NET runtime; it still does not require the .NET SDK.
 
 Backups are written through SQL Server native backup. The SQL Server service account needs write access to the backup folder.
 
@@ -125,7 +175,8 @@ powershell -ExecutionPolicy Bypass -File scripts\build-single-host.ps1
 This script:
 1. Builds the Angular frontend with the production configuration.
 2. Publishes the backend Release build to `artifacts\single-host`.
-3. Copies the built frontend assets into the `wwwroot` folder inside the published backend output (`artifacts\single-host\wwwroot`).
+3. Publishes `BazarFlow.DbMigrator` to `artifacts\single-host\tools`.
+4. Copies the built frontend assets into the `wwwroot` folder inside the published backend output (`artifacts\single-host\wwwroot`).
 
 The completed package is located at:
 

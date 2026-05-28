@@ -5,7 +5,9 @@ $repoRoot = Split-Path -Parent $scriptRoot
 $frontendRoot = Join-Path $repoRoot "frontend"
 $backendRoot = Join-Path $repoRoot "backend"
 $apiProject = Join-Path $backendRoot "src\Supermarket.Api\Supermarket.Api.csproj"
+$dbMigratorProject = Join-Path $backendRoot "tools\BazarFlow.DbMigrator\BazarFlow.DbMigrator.csproj"
 $outputPath = Join-Path $repoRoot "artifacts\single-host"
+$toolsOutputPath = Join-Path $outputPath "tools"
 $frontendDist = Join-Path $repoRoot "artifacts\frontend"
 
 Write-Host "Checking prerequisites..."
@@ -45,6 +47,7 @@ Push-Location $backendRoot
 try {
     dotnet restore
     dotnet publish "src\Supermarket.Api\Supermarket.Api.csproj" -c Release -o $outputPath
+    dotnet publish $dbMigratorProject -c Release -o $toolsOutputPath
 }
 finally {
     Pop-Location
