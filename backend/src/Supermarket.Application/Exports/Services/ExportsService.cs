@@ -43,20 +43,22 @@ namespace Supermarket.Application.Exports.Services
 
         private string BuildFileName(string? requestedName, string resourceType, string format)
         {
-            string ext = format.ToLower() == "excel" ? ".xlsx" : ".pdf";
-            string baseName = string.IsNullOrWhiteSpace(requestedName) 
-                ? $"{resourceType}_{DateTime.UtcNow:yyyy-MM-dd_HH-mm}" 
-                : requestedName.Trim();
+            string ext = Supermarket.Application.Common.Security.SafeFileNamePolicy.ValidateAndGetFormatExtension(format);
+            string fallback = $"{resourceType}_{DateTime.UtcNow:yyyy-MM-dd_HH-mm}{ext}";
 
-            // Sanitize
-            string invalidChars = Regex.Escape(new string(System.IO.Path.GetInvalidFileNameChars()));
-            string sanitized = Regex.Replace(baseName, $"[{invalidChars}]+", "_");
+            string safeName = Supermarket.Application.Common.Security.SafeFileNamePolicy.GetSafeFileName(requestedName, fallback);
 
-            if (!sanitized.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+            if (!safeName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
             {
-                sanitized += ext;
+                // To avoid exceeding max length by appending extension blindly,
+                // GetSafeFileName already takes care of length, but if requestedName didn't have extension:
+                if (safeName.Length + ext.Length > Supermarket.Application.Common.Security.SafeFileNamePolicy.MaxFileNameLength)
+                {
+                    safeName = safeName.Substring(0, Supermarket.Application.Common.Security.SafeFileNamePolicy.MaxFileNameLength - ext.Length);
+                }
+                safeName += ext;
             }
-            return sanitized;
+            return safeName;
         }
 
         private string GetContentType(string format)

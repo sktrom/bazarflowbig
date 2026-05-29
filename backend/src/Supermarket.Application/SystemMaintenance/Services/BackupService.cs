@@ -26,11 +26,13 @@ namespace Supermarket.Application.SystemMaintenance.Services
             var createdAt = DateTime.Now;
             var configuredDirectory = _repository.GetConfiguredBackupDirectory();
             var backupDirectory = ResolveBackupDirectory(configuredDirectory);
+            Supermarket.Application.Common.Security.SafePathPolicy.ValidateBackupDirectory(backupDirectory);
+            
             var fileName = GenerateFileName(createdAt);
             var fullDirectory = Path.GetFullPath(backupDirectory);
             var fullPath = Path.GetFullPath(Path.Combine(fullDirectory, fileName));
 
-            if (!IsPathInsideDirectory(fullPath, fullDirectory))
+            if (!Supermarket.Application.Common.Security.SafePathPolicy.IsPathInsideBaseDirectory(fullPath, fullDirectory))
                 throw new InvalidOperationException("BACKUP_PATH_NOT_ACCESSIBLE");
 
             try
@@ -39,7 +41,7 @@ namespace Supermarket.Application.SystemMaintenance.Services
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
             {
-                throw new InvalidOperationException("BACKUP_PATH_NOT_ACCESSIBLE", ex);
+                throw new InvalidOperationException("BACKUP_PATH_NOT_ACCESSIBLE");
             }
 
             try
