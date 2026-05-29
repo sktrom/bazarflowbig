@@ -31,7 +31,11 @@ namespace Supermarket.Infrastructure.Persistence.Configurations
                 new AppScreen { Id = 6, ScreenKey = "Inventory", ScreenName = "Inventory" },
                 new AppScreen { Id = 7, ScreenKey = "Settings", ScreenName = "Settings" },
                 new AppScreen { Id = 8, ScreenKey = "Purchases", ScreenName = "Purchases" },
-                new AppScreen { Id = 9, ScreenKey = "BlackBox", ScreenName = "الصندوق الأسود" }
+                new AppScreen { Id = 9, ScreenKey = "BlackBox", ScreenName = "الصندوق الأسود" },
+                new AppScreen { Id = 10, ScreenKey = "Backup", ScreenName = "النسخ الاحتياطي" },
+                new AppScreen { Id = 11, ScreenKey = "AuditLogs", ScreenName = "سجل التدقيق" },
+                new AppScreen { Id = 12, ScreenKey = "Employees", ScreenName = "الموظفون" },
+                new AppScreen { Id = 13, ScreenKey = "Devices", ScreenName = "الأجهزة" }
             );
         }
     }

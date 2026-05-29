@@ -101,7 +101,7 @@ export const routes: Routes = [
       {
         path: 'settings',
         canActivate: [ScreenPermissionGuard],
-        data: { screenKey: 'Settings' },
+        data: { screenKey: ['Settings', 'Backup', 'AuditLogs', 'Employees', 'Devices'] },
         loadComponent: () =>
           import('./features/settings/pages/settings.component').then(m => m.SettingsComponent)
       },

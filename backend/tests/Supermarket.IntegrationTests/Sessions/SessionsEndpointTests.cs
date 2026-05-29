@@ -44,7 +44,7 @@ namespace Supermarket.IntegrationTests.Sessions
 
             var screenKeyField = typeof(RequireScreenPermissionAttribute).GetField("_screenKey", BindingFlags.NonPublic | BindingFlags.Instance);
             var screenKeyValue = screenKeyField?.GetValue(permissionAttr) as string;
-            Assert.Equal("Settings", screenKeyValue);
+            Assert.Equal("Devices", screenKeyValue);
 
             await Task.CompletedTask;
         }
@@ -64,7 +64,7 @@ namespace Supermarket.IntegrationTests.Sessions
 
             var screenKeyField = typeof(RequireScreenPermissionAttribute).GetField("_screenKey", BindingFlags.NonPublic | BindingFlags.Instance);
             var screenKeyValue = screenKeyField?.GetValue(permissionAttr) as string;
-            Assert.Equal("Settings", screenKeyValue);
+            Assert.Equal("Devices", screenKeyValue);
 
             await Task.CompletedTask;
         }

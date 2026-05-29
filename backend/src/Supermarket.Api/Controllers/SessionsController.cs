@@ -30,7 +30,7 @@ namespace Supermarket.Api.Controllers
         }
 
         [HttpGet("active")]
-        [RequireScreenPermission("Settings")]
+        [RequireScreenPermission("Devices")]
         public async Task<IActionResult> GetActive()
         {
             var sessions = await _sessionService.GetActiveSessionsAsync();
@@ -38,7 +38,7 @@ namespace Supermarket.Api.Controllers
         }
 
         [HttpPost("{sessionId}/force-close")]
-        [RequireScreenPermission("Settings")]
+        [RequireScreenPermission("Devices")]
         public async Task<IActionResult> ForceClose(long sessionId)
         {
             try

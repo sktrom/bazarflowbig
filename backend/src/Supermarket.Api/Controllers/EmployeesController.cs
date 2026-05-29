@@ -11,7 +11,7 @@ namespace Supermarket.Api.Controllers
     [ApiController]
     [Route("api/employees")]
     [RequireActiveSession]
-    [RequireScreenPermission("Settings")]
+    [RequireScreenPermission("Employees")]
     public class EmployeesController : ControllerBase
     {
         private readonly IEmployeeService _employeeService;

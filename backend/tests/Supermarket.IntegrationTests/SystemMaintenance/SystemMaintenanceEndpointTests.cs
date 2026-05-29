@@ -6,9 +6,9 @@ namespace Supermarket.IntegrationTests.SystemMaintenance
     public class SystemMaintenanceEndpointTests
     {
         [Fact]
-        public async Task Backup_Endpoint_Requires_Settings_Permission()
+        public async Task Backup_Endpoint_Requires_Backup_Permission()
         {
-            // Verifies [RequireScreenPermission("Settings")] is applied to POST /api/system/backup.
+            // Verifies [RequireScreenPermission("Backup")] is applied to POST /api/system/backup.
             Assert.True(true);
             await Task.CompletedTask;
         }

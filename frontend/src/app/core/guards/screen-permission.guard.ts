@@ -8,10 +8,16 @@ export class ScreenPermissionGuard implements CanActivate {
   constructor(private permissionsService: PermissionsService, private router: Router) {}
 
   canActivate(route: ActivatedRouteSnapshot): boolean | UrlTree | Observable<boolean | UrlTree> | Promise<boolean | UrlTree> {
-    const screenKey = route.data['screenKey'] as string;
+    const screenKey = route.data['screenKey'];
     
-    if (screenKey && this.permissionsService.hasPermission(screenKey)) {
-      return true;
+    if (screenKey) {
+      if (Array.isArray(screenKey)) {
+        if (screenKey.some(k => this.permissionsService.hasPermission(k))) {
+          return true;
+        }
+      } else if (typeof screenKey === 'string' && this.permissionsService.hasPermission(screenKey)) {
+        return true;
+      }
     }
     
     // Forbidden

@@ -8,7 +8,7 @@ import { map } from 'rxjs/operators';
 interface MenuItem {
   label: string;
   route: string;
-  screenKey: string;
+  screenKey: string | string[];
 }
 
 @Component({
@@ -48,7 +48,7 @@ export class SidebarComponent implements OnInit {
     { label: 'المنتجات', route: '/products', screenKey: 'Products' },
     { label: 'العروض', route: '/offers', screenKey: 'Offers' },
     { label: 'التقارير', route: '/reports', screenKey: 'Reports' },
-    { label: 'الإعدادات', route: '/settings', screenKey: 'Settings' },
+    { label: 'الإعدادات', route: '/settings', screenKey: ['Settings', 'Backup', 'AuditLogs', 'Employees', 'Devices'] },
     { label: 'الصندوق الأسود', route: '/black-box', screenKey: 'BlackBox' }
   ];
 
@@ -56,10 +56,12 @@ export class SidebarComponent implements OnInit {
 
   ngOnInit() {}
 
-  hasPermission(key: string): Observable<boolean> {
-    // We observe the permissions list and return true if key exists.
+  hasPermission(key: string | string[]): Observable<boolean> {
     return this.permissionsService.permissions$.pipe(
-      map(perms => perms.includes(key))
+      map(perms => {
+        if (Array.isArray(key)) return key.some(k => perms.includes(k));
+        return perms.includes(key);
+      })
     );
   }
 }

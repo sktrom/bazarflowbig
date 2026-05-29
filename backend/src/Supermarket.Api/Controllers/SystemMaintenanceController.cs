@@ -9,7 +9,7 @@ namespace Supermarket.Api.Controllers
     [ApiController]
     [Route("api/system")]
     [RequireActiveSession]
-    [RequireScreenPermission("Settings")]
+    [RequireScreenPermission("Backup")]
     public class SystemMaintenanceController : ControllerBase
     {
         private readonly IBackupService _backupService;

@@ -6,7 +6,7 @@ namespace Supermarket.IntegrationTests.Devices
     public class DevicesEndpointTests
     {
         [Fact]
-        public async Task GetDevices_Endpoint_Requires_ActiveSession_And_SettingsPermission()
+        public async Task GetDevices_Endpoint_Requires_ActiveSession_And_DevicesPermission()
         {
             Assert.True(true);
             await Task.CompletedTask;

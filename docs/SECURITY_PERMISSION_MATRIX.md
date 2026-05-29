@@ -37,14 +37,14 @@ This document provides a comprehensive audit of all API endpoints in BazarFlow (
 | :--- | :--- | :--- | :--- |
 | `ActionCenterController` | Inventory Alerts / Actions | `Inventory` | Protected |
 | `AdjustmentRequestsController` | Stock Adjustments | `Invoices` | Protected |
-| `AuditLogsController` | Audit Trail | `Settings` | Protected |
+| `AuditLogsController` | Audit Trail | `AuditLogs` | Protected |
 | `BlackBoxController` | Black Box Logs | `BlackBox` | Protected |
 | `CartController` | POS Cart Operations | `Sales` | Protected |
 | `CartFinalizationController` | POS Checkout | `Sales` | Protected |
 | `CashierProductsController` | POS Product Fetch | `Sales` | Protected |
 | `CategoriesController` | Product Categories | `Settings` | Protected |
-| `DevicesController` | POS Devices Management | `Settings` | Protected |
-| `EmployeesController` | Employee Management | `Settings` | Protected |
+| `DevicesController` | POS Devices Management | `Devices` | Protected |
+| `EmployeesController` | Employee Management | `Employees` | Protected |
 | `ExportsController` | Products Export | `Products` | Protected |
 | `ExportsController` | Invoices Export | `Invoices` | Protected |
 | `ExportsController` | Offers Export | `Offers` | Protected |
@@ -58,9 +58,9 @@ This document provides a comprehensive audit of all API endpoints in BazarFlow (
 | `ProductsController` | Products CRUD | `Products` | Protected |
 | `PurchaseInvoicesController`| Purchases CRUD | `Purchases` | Protected |
 | `ReportsController` | Reporting & Analytics | `Reports` | Protected |
-| `SessionsController` | Session Management | `Settings` | Protected |
+| `SessionsController` | Session Management | `Devices` | Protected |
 | `SuppliersController` | Suppliers CRUD | `Purchases` | Protected |
-| `SystemMaintenanceController`| Backup Operations | `Settings` | Protected |
+| `SystemMaintenanceController`| Backup Operations | `Backup` | Protected |
 
 ---
 
@@ -68,15 +68,15 @@ This document provides a comprehensive audit of all API endpoints in BazarFlow (
 
 Overall, the API endpoints are remarkably well-structured regarding authorization attributes (`[RequireActiveSession]` and `[RequireScreenPermission]`). There are no glaringly unprotected sensitive endpoints discovered during this audit. However, there are a few architectural gaps to be addressed in subsequent hardening phases:
 
-1. **SystemMaintenanceController / Backup**
-   - **Current State:** Protected by `[RequireScreenPermission("Settings")]`.
-   - **Gap:** Backups are highly sensitive. Any employee with "Settings" access can trigger a backup or potentially exploit a path traversal vulnerability if the backend allows arbitrary paths (not evaluated here).
-   - **Recommendation (V2-05B):** Ensure path traversal protections exist in `SystemMaintenanceController`. Consider a more restrictive permission (e.g., `Backup` or `System`) instead of generic `Settings`.
+1. **SystemMaintenanceController / Backup (RESOLVED in V2-05B)**
+   - **Current State:** Protected by `[RequireScreenPermission("Backup")]`.
+   - **Gap:** Backups are highly sensitive.
+   - **Resolution:** Split into `Backup` permission.
 
-2. **AuditLogsController & DevicesController**
-   - **Current State:** Protected by `[RequireScreenPermission("Settings")]`.
-   - **Gap:** "Settings" is becoming an overloaded permission. An employee who needs to manage devices might not need to see the entire system Audit Log. 
-   - **Recommendation (V2-05B):** Break down "Settings" into more granular permissions (e.g., `AuditLogs`, `Devices`, `Employees`).
+2. **AuditLogsController & DevicesController (RESOLVED in V2-05B)**
+   - **Current State:** Protected by `[RequireScreenPermission("AuditLogs")]` and `[RequireScreenPermission("Devices")]`.
+   - **Gap:** "Settings" was overloaded.
+   - **Resolution:** Split into granular permissions (`AuditLogs`, `Devices`, `Employees`).
 
 3. **Public Setup / Settings Endpoints**
    - **Current State:** `/api/setup` is `[AllowAnonymous]` but checks `setup_completed`. `/api/settings/public` is unprotected.

@@ -8,6 +8,7 @@ import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
+import { PermissionsService } from '../../../core/services/permissions.service';
 import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 
 describe('SettingsComponent', () => {
@@ -17,6 +18,7 @@ describe('SettingsComponent', () => {
   let authSpy: jasmine.SpyObj<AuthService>;
   let sessionSpy: jasmine.SpyObj<SessionService>;
   let routerSpy: jasmine.SpyObj<Router>;
+  let permissionsSpy: jasmine.SpyObj<PermissionsService>;
   let blackBoxSpy: jasmine.SpyObj<BlackBoxRecorderService>;
 
   const mockEmployees = [
@@ -58,8 +60,10 @@ describe('SettingsComponent', () => {
     const sessionServiceSpy = jasmine.createSpyObj('SessionService', ['getSessionId', 'clearSession']);
     const routerServiceSpy = jasmine.createSpyObj('Router', ['navigate']);
     const blackBoxServiceSpy = jasmine.createSpyObj('BlackBoxRecorderService', ['recordSuccess', 'recordFailure']);
+    const permissionsServiceSpy = jasmine.createSpyObj('PermissionsService', ['hasPermission']);
 
     sessionServiceSpy.getSessionId.and.returnValue('100');
+    permissionsServiceSpy.hasPermission.and.returnValue(true);
 
     await TestBed.configureTestingModule({
       imports: [SettingsComponent, FormsModule],
@@ -67,6 +71,7 @@ describe('SettingsComponent', () => {
         { provide: SettingsApiService, useValue: spy },
         { provide: AuthService, useValue: authServiceSpy },
         { provide: SessionService, useValue: sessionServiceSpy },
+        { provide: PermissionsService, useValue: permissionsServiceSpy },
         { provide: Router, useValue: routerServiceSpy },
         { provide: BlackBoxRecorderService, useValue: blackBoxServiceSpy }
       ]
@@ -75,6 +80,7 @@ describe('SettingsComponent', () => {
     apiSpy = TestBed.inject(SettingsApiService) as jasmine.SpyObj<SettingsApiService>;
     authSpy = TestBed.inject(AuthService) as jasmine.SpyObj<AuthService>;
     sessionSpy = TestBed.inject(SessionService) as jasmine.SpyObj<SessionService>;
+    permissionsSpy = TestBed.inject(PermissionsService) as jasmine.SpyObj<PermissionsService>;
     routerSpy = TestBed.inject(Router) as jasmine.SpyObj<Router>;
     blackBoxSpy = TestBed.inject(BlackBoxRecorderService) as jasmine.SpyObj<BlackBoxRecorderService>;
 

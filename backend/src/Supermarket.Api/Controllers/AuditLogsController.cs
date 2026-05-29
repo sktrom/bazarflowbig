@@ -10,7 +10,7 @@ namespace Supermarket.Api.Controllers
     [ApiController]
     [Route("api/audit-logs")]
     [RequireActiveSession]
-    [RequireScreenPermission("Settings")]
+    [RequireScreenPermission("AuditLogs")]
     public class AuditLogsController : ControllerBase
     {
         private readonly IAuditLogQueryService _queryService;

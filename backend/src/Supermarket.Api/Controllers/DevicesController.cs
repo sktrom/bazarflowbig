@@ -10,7 +10,7 @@ namespace Supermarket.Api.Controllers
     [ApiController]
     [Route("api/devices")]
     [RequireActiveSession]
-    [RequireScreenPermission("Settings")]
+    [RequireScreenPermission("Devices")]
     public class DevicesController : ControllerBase
     {
         private readonly IDeviceService _deviceService;

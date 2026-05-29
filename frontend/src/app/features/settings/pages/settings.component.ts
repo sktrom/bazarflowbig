@@ -5,6 +5,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { SessionService } from '../../../core/services/session.service';
+import { PermissionsService } from '../../../core/services/permissions.service';
 import { BlackBoxRecorderService } from '../../../core/services/black-box-recorder.service';
 import { SettingsApiService } from '../services/settings-api.service';
 import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse, CreateBackupResponse, AuditLogListItem, AuditLogDetailResponse, AuditLogStatusResponse, PosDeviceListItem, PosDeviceDetailsResponse, ActiveSessionResponse } from '../models/settings.model';
@@ -12,7 +13,7 @@ import { EmployeeListItem, PermissionEntry, CategoryItem, PublicSettingsResponse
 type TabType = 'employees' | 'categories' | 'store' | 'backup' | 'audit' | 'devices' | 'sessions';
 type ModalType = 'empCreate' | 'empEdit' | 'empDelete' | 'empReset' | 'catCreate' | 'catEdit' | 'catDelete' | 'auditDetail' | 'deviceCreate' | 'deviceEdit' | 'deviceDelete' | 'sessionConfirmClose' | null;
 
-const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings','Purchases'];
+const ALL_SCREENS = ['Sales','Products','Invoices','Offers','Reports','Inventory','Settings','Purchases','Backup','AuditLogs','Employees','Devices'];
 
 const ERR: Record<string,string> = {
   USERNAME_ALREADY_EXISTS: 'اسم المستخدم موجود مسبقًا',
@@ -618,13 +619,13 @@ function mapErr(e: HttpErrorResponse): string {
 })
 export class SettingsComponent implements OnInit {
   tabs = [
-    { id: 'employees' as TabType, label: 'الموظفون' },
-    { id: 'categories' as TabType, label: 'التصنيفات' },
-    { id: 'store' as TabType, label: 'المتجر' },
-    { id: 'backup' as TabType, label: 'النسخ الاحتياطي' },
-    { id: 'audit' as TabType, label: 'سجل النشاط' },
-    { id: 'devices' as TabType, label: 'الأجهزة' },
-    { id: 'sessions' as TabType, label: 'الجلسات النشطة' }
+    { id: 'employees' as TabType, label: 'الموظفون', key: 'Employees' },
+    { id: 'categories' as TabType, label: 'التصنيفات', key: 'Settings' },
+    { id: 'store' as TabType, label: 'المتجر', key: 'Settings' },
+    { id: 'backup' as TabType, label: 'النسخ الاحتياطي', key: 'Backup' },
+    { id: 'audit' as TabType, label: 'سجل النشاط', key: 'AuditLogs' },
+    { id: 'devices' as TabType, label: 'الأجهزة', key: 'Devices' },
+    { id: 'sessions' as TabType, label: 'الجلسات النشطة', key: 'Devices' }
   ];
   allScreens = ALL_SCREENS;
   activeTab: TabType = 'employees';
@@ -684,11 +685,18 @@ export class SettingsComponent implements OnInit {
     private api: SettingsApiService,
     private authService: AuthService,
     private sessionService: SessionService,
+    private permissionsService: PermissionsService,
     private router: Router,
     private blackBox: BlackBoxRecorderService
   ) {}
 
-  ngOnInit() { this.loadTab(); }
+  ngOnInit() {
+    this.tabs = this.tabs.filter(t => this.permissionsService.hasPermission(t.key));
+    if (this.tabs.length > 0 && !this.tabs.find(t => t.id === this.activeTab)) {
+      this.activeTab = this.tabs[0].id;
+    }
+    this.loadTab();
+  }
 
   switchTab(t: TabType) { this.activeTab = t; this.loadTab(); }
 
