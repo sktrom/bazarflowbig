@@ -43,6 +43,7 @@ namespace Supermarket.Infrastructure
             services.AddScoped<IAuditLogRepository, AuditLogRepository>();
             services.AddScoped<IBlackBoxEventRepository, BlackBoxEventRepository>();
             services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+            services.AddScoped<IAppLoginAttemptRepository, AppLoginAttemptRepository>();
             services.AddScoped<IDeviceRepository, DeviceRepository>();
             services.AddScoped<IAuthSessionRepository, AuthSessionRepository>();
             services.AddScoped<ISetupStateRepository, SetupStateRepository>();

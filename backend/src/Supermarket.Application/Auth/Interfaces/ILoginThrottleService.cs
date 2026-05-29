@@ -2,8 +2,9 @@ namespace Supermarket.Application.Auth.Interfaces
 {
     public interface ILoginThrottleService
     {
-        bool IsThrottled(string username, string deviceCode);
-        void RecordFailedAttempt(string username, string deviceCode);
-        void Reset(string username, string deviceCode);
+        Task<bool> IsBlockedAsync(string username, string ipAddress);
+        Task RecordFailedAttemptAsync(string username, string ipAddress, string userAgent, string reason);
+        Task RecordBlockedAttemptAsync(string username, string ipAddress, string userAgent);
+        Task ResetAsync(string username, string ipAddress);
     }
 }

@@ -18,6 +18,7 @@ namespace Supermarket.Infrastructure.Persistence
         public DbSet<AppSetting> AppSettings => Set<AppSetting>();
         public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
         public DbSet<BlackBoxEvent> BlackBoxEvents => Set<BlackBoxEvent>();
+        public DbSet<AppLoginAttempt> AppLoginAttempts => Set<AppLoginAttempt>();
         
         public DbSet<Category> Categories => Set<Category>();
         public DbSet<Product> Products => Set<Product>();

@@ -19,7 +19,7 @@ namespace Supermarket.IntegrationTests.Auth
         public async Task Post_Login_InvalidLogin_ReturnsUnauthorizedLoginFailed()
         {
             _authServiceMock
-                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ThrowsAsync(new InvalidOperationException("LOGIN_FAILED"));
             var controller = CreateController();
 
@@ -27,14 +27,14 @@ namespace Supermarket.IntegrationTests.Auth
 
             var unauthorized = Assert.IsType<UnauthorizedObjectResult>(result);
             Assert.Equal(401, unauthorized.StatusCode);
-            Assert.Equal("LOGIN_FAILED", GetError(unauthorized.Value!));
+            Assert.Equal("اسم المستخدم أو كلمة المرور غير صحيحة", GetError(unauthorized.Value!));
         }
 
         [Fact]
         public async Task Post_Login_RepeatedInvalidLogin_ReturnsTooManyRequestsLoginThrottled()
         {
             _authServiceMock
-                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ThrowsAsync(new InvalidOperationException("LOGIN_THROTTLED"));
             var controller = CreateController();
 
@@ -42,14 +42,14 @@ namespace Supermarket.IntegrationTests.Auth
 
             var objectResult = Assert.IsType<ObjectResult>(result);
             Assert.Equal(429, objectResult.StatusCode);
-            Assert.Equal("LOGIN_THROTTLED", GetError(objectResult.Value!));
+            Assert.Equal("تم تجاوز عدد المحاولات المسموح. حاول بعد عدة دقائق.", GetError(objectResult.Value!));
         }
 
         [Fact]
         public async Task Post_Login_ActiveSession_ReturnsConflict()
         {
             _authServiceMock
-                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ThrowsAsync(new InvalidOperationException("EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION"));
             var controller = CreateController();
 
@@ -63,7 +63,7 @@ namespace Supermarket.IntegrationTests.Auth
         public async Task Post_Login_SetupRequired_ReturnsForbidden()
         {
             _authServiceMock
-                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ThrowsAsync(new InvalidOperationException("SETUP_REQUIRED"));
             var controller = CreateController();
 
@@ -78,7 +78,7 @@ namespace Supermarket.IntegrationTests.Auth
         public async Task Post_Login_DefaultDeviceNotAllowed_ReturnsForbidden()
         {
             _authServiceMock
-                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>()))
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>(), It.IsAny<string>(), It.IsAny<string>()))
                 .ThrowsAsync(new InvalidOperationException("DEFAULT_DEVICE_NOT_ALLOWED"));
             var controller = CreateController();
 
@@ -91,7 +91,12 @@ namespace Supermarket.IntegrationTests.Auth
 
         private AuthController CreateController()
         {
-            return new AuthController(_authServiceMock.Object, _sessionContextMock.Object);
+            var controller = new AuthController(_authServiceMock.Object, _sessionContextMock.Object);
+            
+            var httpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+            controller.ControllerContext = new ControllerContext { HttpContext = httpContext };
+            
+            return controller;
         }
 
         private static LoginRequest LoginRequest()

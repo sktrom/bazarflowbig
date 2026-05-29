@@ -1,97 +1,73 @@
 using System;
-using System.Collections.Generic;
+using System.Threading.Tasks;
 using Supermarket.Application.Auth.Interfaces;
+using Supermarket.Domain.Entities;
 
 namespace Supermarket.Application.Auth.Services
 {
     public class LoginThrottleService : ILoginThrottleService
     {
         private const int MaxAttempts = 5;
-        private static readonly TimeSpan WindowDuration = TimeSpan.FromMinutes(10);
-        private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan WindowDuration = TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan BlockDuration = TimeSpan.FromMinutes(10);
 
-        private readonly object _sync = new();
-        private readonly Dictionary<string, LoginThrottleEntry> _attempts = new();
+        private readonly IAppLoginAttemptRepository _repository;
 
-        public bool IsThrottled(string username, string deviceCode)
+        public LoginThrottleService(IAppLoginAttemptRepository repository)
         {
-            var now = DateTime.UtcNow;
-            var key = BuildKey(username, deviceCode);
+            _repository = repository;
+        }
 
-            lock (_sync)
+        public async Task<bool> IsBlockedAsync(string username, string ipAddress)
+        {
+            var normalizedUsername = (username ?? string.Empty).Trim().ToLowerInvariant();
+            
+            // Check if explicitly blocked in the last 10 minutes
+            var blockSinceUtc = DateTime.UtcNow.Subtract(BlockDuration);
+            if (await _repository.HasRecentBlockAsync(normalizedUsername, ipAddress, blockSinceUtc))
+                return true;
+
+            // Otherwise check if reached max failures in the last 5 minutes
+            var windowSinceUtc = DateTime.UtcNow.Subtract(WindowDuration);
+            var failedCount = await _repository.CountRecentFailedAttemptsAsync(normalizedUsername, ipAddress, windowSinceUtc);
+
+            return failedCount >= MaxAttempts;
+        }
+
+        public async Task RecordFailedAttemptAsync(string username, string ipAddress, string userAgent, string reason)
+        {
+            var attempt = new AppLoginAttempt
             {
-                CleanupExpired(now);
+                UsernameNormalized = (username ?? string.Empty).Trim().ToLowerInvariant(),
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
+                Result = "Failed",
+                FailureReason = reason,
+                CreatedAtUtc = DateTime.UtcNow
+            };
 
-                if (!_attempts.TryGetValue(key, out var entry))
-                    return false;
-
-                return entry.LockoutUntilUtc.HasValue && entry.LockoutUntilUtc.Value > now;
-            }
+            await _repository.AddAsync(attempt);
         }
 
-        public void RecordFailedAttempt(string username, string deviceCode)
+        public async Task RecordBlockedAttemptAsync(string username, string ipAddress, string userAgent)
         {
-            var now = DateTime.UtcNow;
-            var key = BuildKey(username, deviceCode);
-
-            lock (_sync)
+            var attempt = new AppLoginAttempt
             {
-                CleanupExpired(now);
+                UsernameNormalized = (username ?? string.Empty).Trim().ToLowerInvariant(),
+                IpAddress = ipAddress,
+                UserAgent = userAgent,
+                Result = "Blocked",
+                FailureReason = "LOGIN_THROTTLED",
+                CreatedAtUtc = DateTime.UtcNow
+            };
 
-                if (!_attempts.TryGetValue(key, out var entry) || now - entry.WindowStartedAtUtc > WindowDuration)
-                {
-                    entry = new LoginThrottleEntry
-                    {
-                        Count = 0,
-                        WindowStartedAtUtc = now
-                    };
-                }
-
-                entry.Count++;
-                if (entry.Count >= MaxAttempts)
-                    entry.LockoutUntilUtc = now.Add(LockoutDuration);
-
-                _attempts[key] = entry;
-            }
+            await _repository.AddAsync(attempt);
         }
 
-        public void Reset(string username, string deviceCode)
+        public async Task ResetAsync(string username, string ipAddress)
         {
-            var key = BuildKey(username, deviceCode);
-
-            lock (_sync)
-            {
-                _attempts.Remove(key);
-            }
-        }
-
-        private static string BuildKey(string username, string deviceCode)
-        {
-            return $"{(username ?? string.Empty).Trim().ToLowerInvariant()}|{(deviceCode ?? string.Empty).Trim()}";
-        }
-
-        private void CleanupExpired(DateTime now)
-        {
-            var expiredKeys = new List<string>();
-            foreach (var pair in _attempts)
-            {
-                var entry = pair.Value;
-                var lockoutExpired = !entry.LockoutUntilUtc.HasValue || entry.LockoutUntilUtc.Value <= now;
-                var windowExpired = now - entry.WindowStartedAtUtc > WindowDuration;
-
-                if (lockoutExpired && windowExpired)
-                    expiredKeys.Add(pair.Key);
-            }
-
-            foreach (var key in expiredKeys)
-                _attempts.Remove(key);
-        }
-
-        private sealed class LoginThrottleEntry
-        {
-            public int Count { get; set; }
-            public DateTime WindowStartedAtUtc { get; set; }
-            public DateTime? LockoutUntilUtc { get; set; }
+            var normalizedUsername = (username ?? string.Empty).Trim().ToLowerInvariant();
+            await _repository.ClearAttemptsAsync(normalizedUsername, ipAddress);
         }
     }
 }

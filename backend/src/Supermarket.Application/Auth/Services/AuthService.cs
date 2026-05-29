@@ -50,7 +50,7 @@ namespace Supermarket.Application.Auth.Services
             _authPolicy            = authPolicy;
         }
 
-        public async Task<LoginResponse> LoginAsync(LoginRequest request)
+        public async Task<LoginResponse> LoginAsync(LoginRequest request, string ipAddress, string userAgent)
         {
             var username = request.Username ?? string.Empty;
             var deviceCode = request.DeviceCode ?? string.Empty;
@@ -65,8 +65,9 @@ namespace Supermarket.Application.Auth.Services
                 throw new InvalidOperationException("DEFAULT_DEVICE_NOT_ALLOWED");
             }
 
-            if (_loginThrottleService.IsThrottled(username, deviceCode))
+            if (await _loginThrottleService.IsBlockedAsync(username, ipAddress))
             {
+                await _loginThrottleService.RecordBlockedAttemptAsync(username, ipAddress, userAgent);
                 await RecordLoginAuditAsync("LOGIN_THROTTLED", request, "LOGIN_THROTTLED", throttled: true);
                 throw new InvalidOperationException("LOGIN_THROTTLED");
             }
@@ -74,8 +75,13 @@ namespace Supermarket.Application.Auth.Services
             try
             {
                 var employee = await _employeeRepo.GetByUsernameAsync(username);
+                
+                // Prevent user enumeration: compute dummy hash if employee is null
                 if (employee == null)
+                {
+                    _passwordHasher.Hash(request.Password); // Dummy hash to consume time
                     throw new InvalidOperationException("EMPLOYEE_NOT_FOUND");
+                }
 
                 if (!employee.IsActive)
                     throw new InvalidOperationException("EMPLOYEE_INACTIVE");
@@ -129,7 +135,7 @@ namespace Supermarket.Application.Auth.Services
 
                 var allowedKeys = await _permRepo.GetAllowedScreenKeysAsync(employee.Id);
 
-                _loginThrottleService.Reset(username, deviceCode);
+                await _loginThrottleService.ResetAsync(username, ipAddress);
                 await RecordLoginAuditAsync("LOGIN_SUCCESS", request, "SUCCESS", throttled: false);
 
                 return new LoginResponse
@@ -144,7 +150,7 @@ namespace Supermarket.Application.Auth.Services
             }
             catch (InvalidOperationException ex) when (IsUnifiedLoginFailure(ex.Message))
             {
-                _loginThrottleService.RecordFailedAttempt(username, deviceCode);
+                await _loginThrottleService.RecordFailedAttemptAsync(username, ipAddress, userAgent, ex.Message);
                 await RecordLoginAuditAsync("LOGIN_FAILED", request, ex.Message, throttled: false);
                 throw new InvalidOperationException("LOGIN_FAILED");
             }

@@ -49,8 +49,8 @@ namespace Supermarket.UnitTests.Auth
                 .Setup(p => p.AllowDefaultDeviceLogin)
                 .Returns(false);
             _loginThrottleMock
-                .Setup(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()))
-                .Returns(false);
+                .Setup(t => t.IsBlockedAsync(It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(false);
             _sessionTokenGeneratorMock
                 .Setup(g => g.Generate())
                 .Returns("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO12");
@@ -65,14 +65,14 @@ namespace Supermarket.UnitTests.Auth
                 .Setup(h => h.Verify("password", employee.PasswordHash))
                 .Returns(PasswordVerifyResult.Valid);
 
-            var result = await _service.LoginAsync(LoginRequest());
+            var result = await _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent");
 
             Assert.Equal(employee.Id, result.EmployeeId);
             Assert.Equal("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO12", result.SessionToken);
             _employeeRepoMock.Verify(
                 r => r.UpdatePasswordHashAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<DateTime>()),
                 Times.Never);
-            _loginThrottleMock.Verify(t => t.Reset("cashier", "POS-01"), Times.Once);
+            _loginThrottleMock.Verify(t => t.ResetAsync("cashier", "127.0.0.1"), Times.Once);
             _auditLogMock.Verify(a => a.RecordAsync(
                 "LOGIN_SUCCESS",
                 "Auth",
@@ -91,12 +91,12 @@ namespace Supermarket.UnitTests.Auth
                 .Setup(r => r.IsSetupCompletedAsync())
                 .ReturnsAsync(false);
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest()));
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("SETUP_REQUIRED", ex.Message);
             _employeeRepoMock.Verify(r => r.GetByUsernameAsync(It.IsAny<string>()), Times.Never);
             _passwordHasherMock.Verify(h => h.Verify(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
-            _loginThrottleMock.Verify(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _loginThrottleMock.Verify(t => t.IsBlockedAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
@@ -112,7 +112,7 @@ namespace Supermarket.UnitTests.Auth
                     Username = "admin",
                     Password = "admin123",
                     DeviceCode = "DEFAULT_DEVICE"
-                }));
+                }, "127.0.0.1", "TestAgent"));
 
             Assert.Equal("SETUP_REQUIRED", ex.Message);
             _employeeRepoMock.Verify(r => r.GetByUsernameAsync("admin"), Times.Never);
@@ -123,11 +123,11 @@ namespace Supermarket.UnitTests.Auth
         public async Task Login_WithDefaultDevice_WhenPolicyDisabled_ShouldReturnDefaultDeviceNotAllowed()
         {
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _service.LoginAsync(LoginRequest(deviceCode: "DEFAULT_DEVICE")));
+                _service.LoginAsync(LoginRequest(deviceCode: "DEFAULT_DEVICE"), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("DEFAULT_DEVICE_NOT_ALLOWED", ex.Message);
             _employeeRepoMock.Verify(r => r.GetByUsernameAsync(It.IsAny<string>()), Times.Never);
-            _loginThrottleMock.Verify(t => t.IsThrottled(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _loginThrottleMock.Verify(t => t.IsBlockedAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         [Fact]
@@ -158,7 +158,7 @@ namespace Supermarket.UnitTests.Auth
                 .Setup(h => h.Verify("password", employee.PasswordHash))
                 .Returns(PasswordVerifyResult.Valid);
 
-            var result = await _service.LoginAsync(LoginRequest(deviceCode: "DEFAULT_DEVICE"));
+            var result = await _service.LoginAsync(LoginRequest(deviceCode: "DEFAULT_DEVICE"), "127.0.0.1", "TestAgent");
 
             Assert.Equal("DEFAULT_DEVICE", result.DeviceCode);
         }
@@ -175,7 +175,7 @@ namespace Supermarket.UnitTests.Auth
                 .Setup(h => h.Hash("password"))
                 .Returns("identity_hash");
 
-            var result = await _service.LoginAsync(LoginRequest());
+            var result = await _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent");
 
             Assert.Equal(employee.Id, result.EmployeeId);
             Assert.Equal("identity_hash", employee.PasswordHash);
@@ -202,7 +202,7 @@ namespace Supermarket.UnitTests.Auth
                 .Setup(h => h.Verify("password", employee.PasswordHash))
                 .Returns(PasswordVerifyResult.Valid);
 
-            var result = await _service.LoginAsync(LoginRequest());
+            var result = await _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent");
 
             Assert.Equal("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO12", result.SessionToken);
             Assert.NotNull(createdSession);
@@ -218,10 +218,10 @@ namespace Supermarket.UnitTests.Auth
         {
             _employeeRepoMock.Setup(r => r.GetByUsernameAsync("cashier")).ReturnsAsync((Employee?)null);
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest()));
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("LOGIN_FAILED", ex.Message);
-            _loginThrottleMock.Verify(t => t.RecordFailedAttempt("cashier", "POS-01"), Times.Once);
+            _loginThrottleMock.Verify(t => t.RecordFailedAttemptAsync("cashier", "127.0.0.1", "TestAgent", It.IsAny<string>()), Times.Once);
             _auditLogMock.Verify(a => a.RecordAsync(
                 "LOGIN_FAILED",
                 "Auth",
@@ -245,13 +245,13 @@ namespace Supermarket.UnitTests.Auth
                 .Returns(PasswordVerifyResult.Invalid);
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                _service.LoginAsync(LoginRequest(password: "wrong")));
+                _service.LoginAsync(LoginRequest(password: "wrong"), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("LOGIN_FAILED", ex.Message);
             _employeeRepoMock.Verify(
                 r => r.UpdatePasswordHashAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<DateTime>()),
                 Times.Never);
-            _loginThrottleMock.Verify(t => t.RecordFailedAttempt("cashier", "POS-01"), Times.Once);
+            _loginThrottleMock.Verify(t => t.RecordFailedAttemptAsync("cashier", "127.0.0.1", "TestAgent", It.IsAny<string>()), Times.Once);
         }
 
         [Fact]
@@ -264,18 +264,18 @@ namespace Supermarket.UnitTests.Auth
                 .Returns(PasswordVerifyResult.Valid);
             _deviceRepoMock.Setup(r => r.GetByCodeAsync("POS-01")).ReturnsAsync((PosDevice?)null);
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest()));
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("LOGIN_FAILED", ex.Message);
-            _loginThrottleMock.Verify(t => t.RecordFailedAttempt("cashier", "POS-01"), Times.Once);
+            _loginThrottleMock.Verify(t => t.RecordFailedAttemptAsync("cashier", "127.0.0.1", "TestAgent", It.IsAny<string>()), Times.Once);
         }
 
         [Fact]
         public async Task Login_WhenThrottled_ShouldReturnLoginThrottled()
         {
-            _loginThrottleMock.Setup(t => t.IsThrottled("cashier", "POS-01")).Returns(true);
+            _loginThrottleMock.Setup(t => t.IsBlockedAsync("cashier", "127.0.0.1")).ReturnsAsync(true);
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest()));
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("LOGIN_THROTTLED", ex.Message);
             _employeeRepoMock.Verify(r => r.GetByUsernameAsync(It.IsAny<string>()), Times.Never);
@@ -300,10 +300,10 @@ namespace Supermarket.UnitTests.Auth
                 .Returns(PasswordVerifyResult.Valid);
             _sessionRepoMock.Setup(r => r.GetActiveByEmployeeIdAsync(employee.Id)).ReturnsAsync(new CashSession { Id = 44 });
 
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest()));
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.LoginAsync(LoginRequest(), "127.0.0.1", "TestAgent"));
 
             Assert.Equal("EMPLOYEE_ALREADY_HAS_ACTIVE_SESSION", ex.Message);
-            _loginThrottleMock.Verify(t => t.RecordFailedAttempt(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+            _loginThrottleMock.Verify(t => t.RecordFailedAttemptAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()), Times.Never);
         }
 
         private void SetupSuccessfulLoginDependencies(Employee employee)

@@ -26,16 +26,19 @@ namespace Supermarket.Api.Controllers
         {
             try
             {
-                var response = await _authService.LoginAsync(request);
+                var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var userAgent = Request.Headers["User-Agent"].ToString() ?? "unknown";
+
+                var response = await _authService.LoginAsync(request, ipAddress, userAgent);
                 return Ok(response);
             }
             catch (InvalidOperationException ex)
             {
                 if (ex.Message == "LOGIN_FAILED")
-                    return Unauthorized(new { error = ex.Message });
+                    return Unauthorized(new { error = "اسم المستخدم أو كلمة المرور غير صحيحة" });
 
                 if (ex.Message == "LOGIN_THROTTLED")
-                    return StatusCode(429, new { error = ex.Message });
+                    return StatusCode(429, new { error = "تم تجاوز عدد المحاولات المسموح. حاول بعد عدة دقائق." });
 
                 if (ex.Message == "SETUP_REQUIRED")
                     return StatusCode(403, new { error = ex.Message });

@@ -5,7 +5,7 @@ namespace Supermarket.Application.Auth.Interfaces
 {
     public interface IAuthService
     {
-        Task<LoginResponse> LoginAsync(LoginRequest request);
+        Task<LoginResponse> LoginAsync(LoginRequest request, string ipAddress, string userAgent);
         Task<LogoutResponse> LogoutAsync(long sessionId);
         Task<CurrentEmployeeResponse> GetCurrentEmployeeAsync(long sessionId);
         Task<EmployeePermissionsResponse> GetPermissionsAsync(long employeeId);

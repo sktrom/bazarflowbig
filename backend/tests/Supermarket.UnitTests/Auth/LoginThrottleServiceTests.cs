@@ -1,43 +1,68 @@
+using System;
+using System.Threading.Tasks;
+using Moq;
+using Supermarket.Application.Auth.Interfaces;
 using Supermarket.Application.Auth.Services;
+using Supermarket.Domain.Entities;
 using Xunit;
 
 namespace Supermarket.UnitTests.Auth
 {
     public class LoginThrottleServiceTests
     {
-        [Fact]
-        public void RepeatedFailures_ShouldThrottleAfterMaxAttempts()
+        private readonly Mock<IAppLoginAttemptRepository> _repoMock;
+        private readonly LoginThrottleService _service;
+
+        public LoginThrottleServiceTests()
         {
-            var service = new LoginThrottleService();
-
-            for (var i = 0; i < 5; i++)
-                service.RecordFailedAttempt(" Cashier ", " POS-01 ");
-
-            Assert.True(service.IsThrottled("cashier", "POS-01"));
+            _repoMock = new Mock<IAppLoginAttemptRepository>();
+            _service = new LoginThrottleService(_repoMock.Object);
         }
 
         [Fact]
-        public void Reset_ShouldClearAttempts()
+        public async Task RepeatedFailures_ShouldThrottleAfterMaxAttempts()
         {
-            var service = new LoginThrottleService();
+            _repoMock.Setup(r => r.CountRecentFailedAttemptsAsync("cashier", "127.0.0.1", It.IsAny<DateTime>()))
+                     .ReturnsAsync(5);
 
-            for (var i = 0; i < 5; i++)
-                service.RecordFailedAttempt("cashier", "POS-01");
+            var isBlocked = await _service.IsBlockedAsync("cashier", "127.0.0.1");
 
-            service.Reset("cashier", "POS-01");
-
-            Assert.False(service.IsThrottled("cashier", "POS-01"));
+            Assert.True(isBlocked);
         }
 
         [Fact]
-        public void DeviceCode_ShouldOnlyBeTrimmed_NotCaseNormalized()
+        public async Task UnderMaxAttempts_ShouldNotThrottle()
         {
-            var service = new LoginThrottleService();
+            _repoMock.Setup(r => r.CountRecentFailedAttemptsAsync("cashier", "127.0.0.1", It.IsAny<DateTime>()))
+                     .ReturnsAsync(4);
 
-            for (var i = 0; i < 5; i++)
-                service.RecordFailedAttempt("cashier", "POS-01");
+            var isBlocked = await _service.IsBlockedAsync("cashier", "127.0.0.1");
 
-            Assert.False(service.IsThrottled("cashier", "pos-01"));
+            Assert.False(isBlocked);
+        }
+
+        [Fact]
+        public async Task HasRecentBlock_ShouldThrottleEvenIfUnderMaxAttempts()
+        {
+            _repoMock.Setup(r => r.HasRecentBlockAsync("cashier", "127.0.0.1", It.IsAny<DateTime>()))
+                     .ReturnsAsync(true);
+            _repoMock.Setup(r => r.CountRecentFailedAttemptsAsync("cashier", "127.0.0.1", It.IsAny<DateTime>()))
+                     .ReturnsAsync(0);
+
+            var isBlocked = await _service.IsBlockedAsync("cashier", "127.0.0.1");
+
+            Assert.True(isBlocked);
+        }
+
+        [Fact]
+        public async Task RecordFailedAttempt_ShouldNormalizeUsername()
+        {
+            await _service.RecordFailedAttemptAsync(" CaShiEr ", "127.0.0.1", "Agent", "Failed");
+
+            _repoMock.Verify(r => r.AddAsync(It.Is<AppLoginAttempt>(a => 
+                a.UsernameNormalized == "cashier" &&
+                a.Result == "Failed"
+            )), Times.Once);
         }
     }
 }
