@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Supermarket.Application.Common.Services;
 using Supermarket.Domain.Entities;
+using Supermarket.Domain.Enums;
 using Supermarket.Infrastructure.Persistence;
 
 namespace BazarFlow.PerformanceSeeder;
@@ -8,6 +9,7 @@ namespace BazarFlow.PerformanceSeeder;
 public sealed class EfReferenceDataWriter : IReferenceDataWriter
 {
     private const int ProductBatchSize = 1_000;
+    private const int PurchaseBatchSize = 250;
     private readonly SupermarketDbContext _context;
     private readonly PasswordHasher _passwordHasher = new();
 
@@ -43,6 +45,116 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
     public async ValueTask DisposeAsync()
     {
         await _context.DisposeAsync();
+    }
+
+    public async Task<PurchaseSeedResult> SeedPurchasesAsync(
+        int seed,
+        ProfileConfig profile,
+        TextWriter output,
+        CancellationToken cancellationToken = default)
+    {
+        var previousAutoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+
+        try
+        {
+            var transactionProfile = TransactionProfileConfig.Get(profile.Name);
+            var refs = await LoadSyntheticReferencesAsync(seed, profile, cancellationToken);
+            var plan = PurchaseDataGenerator.Generate(seed, transactionProfile, refs.Products, refs.Suppliers, refs.Employees);
+            var seedToken = SyntheticPreviewGenerator.SeedToken(seed);
+            var purchasePrefix = $"BF-PERF-PUR-{seedToken}-";
+
+            var existingInvoiceNumbers = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .Where(invoice => invoice.InvoiceNumber.StartsWith(purchasePrefix))
+                .Select(invoice => invoice.InvoiceNumber)
+                .ToListAsync(cancellationToken);
+
+            var existingSet = existingInvoiceNumbers.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingPurchaseLines = await _context.PurchaseInvoiceLines
+                .AsNoTracking()
+                .CountAsync(line => line.PurchaseInvoice != null && line.PurchaseInvoice.InvoiceNumber.StartsWith(purchasePrefix), cancellationToken);
+            var existingProductBatches = await _context.ProductBatches
+                .AsNoTracking()
+                .CountAsync(batch => batch.EntryInvoiceNumber != null && batch.EntryInvoiceNumber.StartsWith($"BF-PERF-EXT-PUR-{seedToken}-"), cancellationToken);
+
+            var insertedPurchases = 0;
+            var insertedLines = 0;
+            var insertedBatches = 0;
+
+            foreach (var purchaseChunk in plan.Purchases.Where(purchase => !existingSet.Contains(purchase.InvoiceNumber)).Chunk(PurchaseBatchSize))
+            {
+                var purchaseEntities = purchaseChunk.Select(purchase => new PurchaseInvoice
+                {
+                    InvoiceNumber = purchase.InvoiceNumber,
+                    SupplierId = purchase.SupplierId,
+                    CreatedByEmployeeId = purchase.CreatedByEmployeeId,
+                    Status = PurchaseInvoiceStatus.Completed,
+                    ExternalInvoiceNumber = purchase.ExternalInvoiceNumber,
+                    Notes = "Synthetic performance purchase",
+                    SubtotalUsd = purchase.SubtotalUsd,
+                    TotalUsd = purchase.TotalUsd,
+                    CreatedAt = purchase.CreatedAt,
+                    UpdatedAt = purchase.UpdatedAt,
+                    CompletedAt = purchase.CompletedAt,
+                    CompletedByEmployeeId = purchase.CompletedByEmployeeId,
+                    Lines = purchase.Lines.Select(line => new PurchaseInvoiceLine
+                    {
+                        ProductId = line.ProductId,
+                        Quantity = line.Quantity,
+                        UnitCostUsd = line.UnitCostUsd,
+                        LineTotalUsd = line.LineTotalUsd,
+                        ExpiryDate = line.ExpiryDate,
+                        Notes = "Synthetic performance purchase line",
+                        SortOrder = line.SortOrder
+                    }).ToList()
+                }).ToList();
+
+                if (purchaseEntities.Count == 0)
+                {
+                    continue;
+                }
+
+                _context.PurchaseInvoices.AddRange(purchaseEntities);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                var batchEntities = purchaseEntities
+                    .SelectMany(purchase => purchase.Lines.Select(line => new ProductBatch
+                    {
+                        ProductId = line.ProductId,
+                        QuantityReceived = line.Quantity,
+                        QuantityAvailable = line.Quantity,
+                        EntryDate = purchase.CompletedAt,
+                        ExpiryDate = line.ExpiryDate,
+                        EntryInvoiceNumber = purchase.ExternalInvoiceNumber ?? purchase.InvoiceNumber,
+                        PurchaseInvoiceLineId = line.Id,
+                        UnitCostUsd = line.UnitCostUsd,
+                        EnteredByEmployeeId = purchase.CompletedByEmployeeId ?? purchase.CreatedByEmployeeId
+                    }))
+                    .ToList();
+
+                _context.ProductBatches.AddRange(batchEntities);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                insertedPurchases += purchaseEntities.Count;
+                insertedLines += purchaseEntities.Sum(purchase => purchase.Lines.Count);
+                insertedBatches += batchEntities.Count;
+                _context.ChangeTracker.Clear();
+                output.WriteLine($"Purchases batch inserted: {insertedPurchases}/{plan.Purchases.Count}");
+            }
+
+            var purchaseResult = new EntitySeedResult("Purchases", plan.Purchases.Count, existingSet.Count, insertedPurchases);
+            var lineResult = new EntitySeedResult("PurchaseLines", plan.PurchaseLineCount, existingPurchaseLines, insertedLines);
+            var batchResult = new EntitySeedResult("ProductBatches", plan.PurchaseLineCount, existingProductBatches, insertedBatches);
+            PrintProgress(output, purchaseResult);
+            PrintProgress(output, lineResult);
+            PrintProgress(output, batchResult);
+            return new PurchaseSeedResult(purchaseResult, lineResult, batchResult);
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetectChanges;
+        }
     }
 
     private async Task<EntitySeedResult> SeedCategoriesAsync(
@@ -259,4 +371,44 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
     {
         output.WriteLine($"{result.EntityName}: planned={result.Planned}, existing={result.Existing}, inserted={result.Inserted}");
     }
+
+    private async Task<SyntheticReferenceSet> LoadSyntheticReferencesAsync(
+        int seed,
+        ProfileConfig profile,
+        CancellationToken cancellationToken)
+    {
+        var seedToken = SyntheticPreviewGenerator.SeedToken(seed);
+        var products = await _context.Products
+            .AsNoTracking()
+            .Where(product => product.Barcode.StartsWith($"BF-PERF-{seedToken}-"))
+            .OrderBy(product => product.Barcode)
+            .Select(product => new SyntheticProductRef(product.Id, product.Barcode, product.PriceUsd, product.HasExpiry))
+            .ToListAsync(cancellationToken);
+
+        var suppliers = await _context.Suppliers
+            .AsNoTracking()
+            .Where(supplier => supplier.Name.StartsWith($"BF-PERF Supplier {seedToken}-"))
+            .OrderBy(supplier => supplier.Name)
+            .Select(supplier => new SyntheticSupplierRef(supplier.Id, supplier.Name))
+            .ToListAsync(cancellationToken);
+
+        var employees = await _context.Employees
+            .AsNoTracking()
+            .Where(employee => employee.Username.EndsWith($".{seedToken}@example.test"))
+            .OrderBy(employee => employee.Username)
+            .Select(employee => new SyntheticEmployeeRef(employee.Id, employee.Username))
+            .ToListAsync(cancellationToken);
+
+        if (products.Count < profile.Products || suppliers.Count < profile.Suppliers || employees.Count < profile.Employees)
+        {
+            throw new InvalidOperationException("Run core reference data generation first.");
+        }
+
+        return new SyntheticReferenceSet(products, suppliers, employees);
+    }
+
+    private sealed record SyntheticReferenceSet(
+        IReadOnlyList<SyntheticProductRef> Products,
+        IReadOnlyList<SyntheticSupplierRef> Suppliers,
+        IReadOnlyList<SyntheticEmployeeRef> Employees);
 }

@@ -7,7 +7,8 @@ public sealed record SeederCliOptions(
     bool Confirm,
     bool Reset,
     bool ConfirmReset,
-    bool DryRun)
+    bool DryRun,
+    bool IncludeTransactions)
 {
     public static ParseResult<SeederCliOptions> Parse(IReadOnlyList<string> args)
     {
@@ -18,6 +19,7 @@ public sealed record SeederCliOptions(
         var reset = false;
         var confirmReset = false;
         var dryRun = false;
+        var includeTransactions = false;
 
         for (var i = 0; i < args.Count; i++)
         {
@@ -64,13 +66,16 @@ public sealed record SeederCliOptions(
                 case "--dry-run":
                     dryRun = true;
                     break;
+                case "--include-transactions":
+                    includeTransactions = true;
+                    break;
                 default:
                     return ParseResult<SeederCliOptions>.Fail($"Unknown option '{arg}'.");
             }
         }
 
         return ParseResult<SeederCliOptions>.Ok(
-            new SeederCliOptions(profile, connectionString, seed, confirm, reset, confirmReset, dryRun));
+            new SeederCliOptions(profile, connectionString, seed, confirm, reset, confirmReset, dryRun, includeTransactions));
     }
 
     private static bool TryReadValue(IReadOnlyList<string> args, ref int index, out string? value)

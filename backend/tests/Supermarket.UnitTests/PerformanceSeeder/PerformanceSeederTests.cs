@@ -30,7 +30,7 @@ public class PerformanceSeederTests
     [Fact]
     public void MissingConfirm_IsRejected()
     {
-        var options = new SeederCliOptions("small", null, 12345, Confirm: false, Reset: false, ConfirmReset: false, DryRun: true);
+        var options = new SeederCliOptions("small", null, 12345, Confirm: false, Reset: false, ConfirmReset: false, DryRun: true, IncludeTransactions: false);
 
         var result = SafetyValidator.Validate(options, "Server=.;Database=BazarFlowPerformance;");
 
@@ -41,7 +41,7 @@ public class PerformanceSeederTests
     [Fact]
     public void MissingProfile_IsRejected()
     {
-        var options = new SeederCliOptions(null, null, 12345, Confirm: true, Reset: false, ConfirmReset: false, DryRun: true);
+        var options = new SeederCliOptions(null, null, 12345, Confirm: true, Reset: false, ConfirmReset: false, DryRun: true, IncludeTransactions: false);
 
         var result = SafetyValidator.Validate(options, "Server=.;Database=BazarFlowPerformance;");
 
@@ -52,7 +52,7 @@ public class PerformanceSeederTests
     [Fact]
     public void Reset_RequiresConfirmReset()
     {
-        var options = new SeederCliOptions("small", null, 12345, Confirm: true, Reset: true, ConfirmReset: false, DryRun: true);
+        var options = new SeederCliOptions("small", null, 12345, Confirm: true, Reset: true, ConfirmReset: false, DryRun: true, IncludeTransactions: false);
 
         var result = SafetyValidator.Validate(options, "Server=.;Database=BazarFlowPerformance;");
 
@@ -66,6 +66,15 @@ public class PerformanceSeederTests
         Assert.Equal(new ProfileConfig("small", 10, 5, 500, 3, 3, 1_000), ProfileConfig.Get("small"));
         Assert.Equal(new ProfileConfig("medium", 50, 30, 5_000, 10, 10, 10_000), ProfileConfig.Get("medium"));
         Assert.Equal(new ProfileConfig("large", 150, 100, 20_000, 30, 30, 50_000), ProfileConfig.Get("large"));
+    }
+
+    [Fact]
+    public void Parser_ReadsIncludeTransactionsFlag()
+    {
+        var result = SeederCliOptions.Parse(["--profile", "small", "--confirm", "--include-transactions"]);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.Value!.IncludeTransactions);
     }
 
     [Fact]
@@ -155,6 +164,32 @@ public class PerformanceSeederTests
     }
 
     [Fact]
+    public async Task DryRunWithIncludeTransactions_DoesNotOpenWriter()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exitCode = await PerformanceSeederApp.RunAsync(
+            [
+                "--profile", "small",
+                "--connection", "Server=.;Database=BazarFlowPerformance;",
+                "--confirm",
+                "--dry-run",
+                "--include-transactions"
+            ],
+            output,
+            error,
+            _ => throw new InvalidOperationException("Writer should not be opened during dry-run."));
+
+        var text = output.ToString();
+
+        Assert.Equal(PerformanceSeederExitCodes.Success, exitCode);
+        Assert.Contains("Transactional dry-run", text);
+        Assert.Contains("Planned purchases: 100", text);
+        Assert.Contains("BF-PERF-PUR-12345-000001", text);
+    }
+
+    [Fact]
     public async Task UnsafeDatabaseName_PreventsWriter()
     {
         var output = new StringWriter();
@@ -193,7 +228,56 @@ public class PerformanceSeederTests
             _ => throw new InvalidOperationException("Writer should not be opened when reset is deferred."));
 
         Assert.Equal(PerformanceSeederExitCodes.ImplementationPending, exitCode);
-        Assert.Contains("Reset is not implemented in V2-06B-2", error.ToString());
+        Assert.Contains("Reset is not implemented in V2-06B-3A", error.ToString());
+    }
+
+    [Fact]
+    public void PurchaseNumbers_AreDeterministicAndUnique()
+    {
+        var first = CreateSmallPurchasePlan(12345);
+        var second = CreateSmallPurchasePlan(12345);
+
+        Assert.Equal(first.Purchases.Select(p => p.InvoiceNumber), second.Purchases.Select(p => p.InvoiceNumber));
+        Assert.Equal(first.Purchases.Count, first.Purchases.Select(p => p.InvoiceNumber).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void PurchaseTotals_AreCorrect()
+    {
+        var plan = CreateSmallPurchasePlan(12345);
+
+        Assert.All(plan.Purchases, purchase =>
+        {
+            Assert.Equal(purchase.Lines.Sum(line => line.LineTotalUsd), purchase.SubtotalUsd);
+            Assert.Equal(purchase.SubtotalUsd, purchase.TotalUsd);
+        });
+    }
+
+    [Fact]
+    public void PurchaseDates_AreWithinProfileWindow()
+    {
+        var plan = CreateSmallPurchasePlan(12345);
+        var earliest = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc).AddDays(-TransactionProfileConfig.Get("small").DateWindowDays);
+        var latest = new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.All(plan.Purchases, purchase =>
+        {
+            Assert.True(purchase.CreatedAt >= earliest);
+            Assert.True(purchase.CreatedAt < latest);
+            Assert.True(purchase.CompletedAt >= purchase.CreatedAt);
+        });
+    }
+
+    [Fact]
+    public void PurchaseLineQuantities_AreInRangeAndUseSyntheticProducts()
+    {
+        var plan = CreateSmallPurchasePlan(12345);
+
+        Assert.All(plan.Purchases.SelectMany(p => p.Lines), line =>
+        {
+            Assert.InRange(line.Quantity, 10, 500);
+            Assert.StartsWith("BF-PERF-", line.ProductBarcode);
+        });
     }
 
     [Fact]
@@ -275,9 +359,29 @@ public class PerformanceSeederTests
             throw _exception;
         }
 
+        public Task<PurchaseSeedResult> SeedPurchasesAsync(int seed, ProfileConfig profile, TextWriter output, CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;
         }
+    }
+
+    private static PurchasePlan CreateSmallPurchasePlan(int seed)
+    {
+        var products = Enumerable.Range(1, 20)
+            .Select(index => new SyntheticProductRef(index, SyntheticPreviewGenerator.Barcode(seed, index), 10m + index, index % 3 == 0))
+            .ToList();
+        var suppliers = Enumerable.Range(1, 5)
+            .Select(index => new SyntheticSupplierRef(index, SyntheticPreviewGenerator.SupplierName(seed, index)))
+            .ToList();
+        var employees = Enumerable.Range(1, 3)
+            .Select(index => new SyntheticEmployeeRef(index, SyntheticPreviewGenerator.EmployeeUsername(seed, index)))
+            .ToList();
+
+        return PurchaseDataGenerator.Generate(seed, TransactionProfileConfig.Get("small"), products, suppliers, employees);
     }
 }

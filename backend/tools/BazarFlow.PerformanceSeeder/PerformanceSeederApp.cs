@@ -45,13 +45,13 @@ public static class PerformanceSeederApp
 
         if (options.DryRun)
         {
-            PrintDryRun(output, plan, databaseName!, options.Reset);
+            PrintDryRun(output, plan, databaseName!, options.Reset, options.IncludeTransactions);
             return PerformanceSeederExitCodes.Success;
         }
 
         if (options.Reset)
         {
-            error.WriteLine("Reset is not implemented in V2-06B-2. Remove --reset.");
+            error.WriteLine("Reset is not implemented in V2-06B-3A. Remove --reset.");
             return PerformanceSeederExitCodes.ImplementationPending;
         }
 
@@ -61,6 +61,13 @@ public static class PerformanceSeederApp
             await using var writer = writerFactory(connectionString!);
             var result = await writer.SeedAsync(plan, output, cancellationToken);
             PrintWriteSummary(output, result);
+            if (options.IncludeTransactions)
+            {
+                output.WriteLine("Starting transactional purchase/product batch generation.");
+                var purchaseResult = await writer.SeedPurchasesAsync(seed, profile, output, cancellationToken);
+                PrintPurchaseSummary(output, purchaseResult);
+            }
+
             return PerformanceSeederExitCodes.Success;
         }
         catch (Exception ex)
@@ -73,9 +80,10 @@ public static class PerformanceSeederApp
     private static void PrintWarning(TextWriter output, SeederCliOptions options, string databaseName, int seed)
     {
         output.WriteLine("============================================================");
-        output.WriteLine(" BazarFlow Performance Seeder - V2-06B-2 CORE REFERENCE DATA");
+        output.WriteLine(" BazarFlow Performance Seeder - V2-06B-3A PURCHASE TRANSACTIONS");
         output.WriteLine(" Synthetic data only. Production databases are forbidden.");
         output.WriteLine(" Writes are limited to categories, suppliers, products, employees, and devices.");
+        output.WriteLine(" Purchases and product batches are generated only when --include-transactions is used.");
         output.WriteLine(" Reset operations are not implemented.");
         output.WriteLine("============================================================");
         output.WriteLine($"Profile: {options.Profile}");
@@ -85,7 +93,7 @@ public static class PerformanceSeederApp
         output.WriteLine();
     }
 
-    private static void PrintDryRun(TextWriter output, ReferenceDataPlan plan, string databaseName, bool reset)
+    private static void PrintDryRun(TextWriter output, ReferenceDataPlan plan, string databaseName, bool reset, bool includeTransactions)
     {
         output.WriteLine("Dry-run summary");
         output.WriteLine($"Profile: {plan.Profile.Name}");
@@ -129,6 +137,17 @@ public static class PerformanceSeederApp
         {
             output.WriteLine($"  Device: {device.DeviceCode}");
         }
+
+        if (includeTransactions)
+        {
+            var transactionProfile = TransactionProfileConfig.Get(plan.Profile.Name);
+            output.WriteLine("Transactional dry-run:");
+            output.WriteLine($"  Planned purchases: {transactionProfile.Purchases}");
+            output.WriteLine($"  Planned purchase lines: {transactionProfile.MinimumPurchaseLines}-{transactionProfile.MaximumPurchaseLines}");
+            output.WriteLine($"  Planned product batches: {transactionProfile.MinimumPurchaseLines}-{transactionProfile.MaximumPurchaseLines}");
+            output.WriteLine($"  Sample purchase number: {PurchaseDataGenerator.PurchaseInvoiceNumber(plan.Seed, 1)}");
+            output.WriteLine($"  Sample external invoice number: {PurchaseDataGenerator.PurchaseExternalInvoiceNumber(plan.Seed, 1)}");
+        }
     }
 
     private static void PrintWriteSummary(TextWriter output, ReferenceDataSeedResult result)
@@ -139,5 +158,13 @@ public static class PerformanceSeederApp
         output.WriteLine($"Products: planned={result.Products.Planned}, existing={result.Products.Existing}, inserted={result.Products.Inserted}");
         output.WriteLine($"Employees: planned={result.Employees.Planned}, existing={result.Employees.Existing}, inserted={result.Employees.Inserted}");
         output.WriteLine($"Devices: planned={result.Devices.Planned}, existing={result.Devices.Existing}, inserted={result.Devices.Inserted}");
+    }
+
+    private static void PrintPurchaseSummary(TextWriter output, PurchaseSeedResult result)
+    {
+        output.WriteLine("Transactional purchase/product batch generation complete.");
+        output.WriteLine($"Purchases: planned={result.Purchases.Planned}, existing={result.Purchases.Existing}, inserted={result.Purchases.Inserted}");
+        output.WriteLine($"PurchaseLines: planned={result.PurchaseLines.Planned}, existing={result.PurchaseLines.Existing}, inserted={result.PurchaseLines.Inserted}");
+        output.WriteLine($"ProductBatches: planned={result.ProductBatches.Planned}, existing={result.ProductBatches.Existing}, inserted={result.ProductBatches.Inserted}");
     }
 }

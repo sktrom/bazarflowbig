@@ -2,6 +2,7 @@ using BazarFlow.PerformanceSeeder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Supermarket.Domain.Entities;
+using Supermarket.Domain.Enums;
 using Supermarket.Infrastructure.Persistence;
 using Xunit;
 
@@ -41,6 +42,68 @@ public class PerformanceSeederReferenceDataWriterTests
         var nonSynthetic = await db.Categories.SingleAsync(category => category.Name == "Real Category");
         Assert.True(nonSynthetic.IsActive);
         Assert.Equal(1, await db.Categories.CountAsync(category => category.Name == "Real Category"));
+    }
+
+    [Fact]
+    public async Task SeedPurchasesAsync_RefusesWhenProductsMissing()
+    {
+        await using var db = CreateInMemoryDbContext();
+        await using var writer = new EfReferenceDataWriter(db);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => writer.SeedPurchasesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null));
+
+        Assert.Equal("Run core reference data generation first.", exception.Message);
+    }
+
+    [Fact]
+    public async Task SeedPurchasesAsync_SecondRunDoesNotDuplicatePurchasesOrBatches()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+        await writer.SeedPurchasesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedPurchasesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+
+        var transactionProfile = TransactionProfileConfig.Get("small");
+        Assert.Equal(transactionProfile.Purchases, await db.PurchaseInvoices.CountAsync(invoice => invoice.InvoiceNumber.StartsWith("BF-PERF-PUR-12345-")));
+
+        var lineCount = await db.PurchaseInvoiceLines
+            .CountAsync(line => line.PurchaseInvoice != null && line.PurchaseInvoice.InvoiceNumber.StartsWith("BF-PERF-PUR-12345-"));
+        Assert.InRange(lineCount, transactionProfile.MinimumPurchaseLines, transactionProfile.MaximumPurchaseLines);
+        Assert.Equal(lineCount, await db.ProductBatches.CountAsync(batch => batch.EntryInvoiceNumber != null && batch.EntryInvoiceNumber.StartsWith("BF-PERF-EXT-PUR-12345-")));
+    }
+
+    [Fact]
+    public async Task SeedPurchasesAsync_DoesNotModifyNonSyntheticPurchases()
+    {
+        await using var db = CreateInMemoryDbContext();
+        db.PurchaseInvoices.Add(new PurchaseInvoice
+        {
+            InvoiceNumber = "REAL-PUR-1",
+            SupplierId = 999,
+            CreatedByEmployeeId = 999,
+            CompletedByEmployeeId = 999,
+            Status = PurchaseInvoiceStatus.Completed,
+            SubtotalUsd = 10m,
+            TotalUsd = 10m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+        await writer.SeedPurchasesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+
+        var realPurchase = await db.PurchaseInvoices.SingleAsync(invoice => invoice.InvoiceNumber == "REAL-PUR-1");
+        Assert.Equal(10m, realPurchase.TotalUsd);
+        Assert.Equal(1, await db.PurchaseInvoices.CountAsync(invoice => invoice.InvoiceNumber == "REAL-PUR-1"));
     }
 
     private static SupermarketDbContext CreateInMemoryDbContext()
