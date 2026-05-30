@@ -1,0 +1,123 @@
+using BazarFlow.PerformanceSeeder;
+using Xunit;
+
+namespace Supermarket.UnitTests.PerformanceSeeder;
+
+public class PerformanceSeederTests
+{
+    [Theory]
+    [InlineData("BazarFlow")]
+    [InlineData("BazarFlowProd")]
+    [InlineData("Production")]
+    [InlineData("Prod")]
+    [InlineData("BazarFlowPerformanceProd")]
+    [InlineData("CustomerMain")]
+    public void UnsafeDatabaseName_IsRejected(string databaseName)
+    {
+        Assert.False(SafetyValidator.IsSafeDatabaseName(databaseName));
+    }
+
+    [Theory]
+    [InlineData("BazarFlowPerformance")]
+    [InlineData("BazarFlowPerf")]
+    [InlineData("BazarFlowTest")]
+    [InlineData("BazarFlowLoad")]
+    public void SafeDatabaseName_IsAccepted(string databaseName)
+    {
+        Assert.True(SafetyValidator.IsSafeDatabaseName(databaseName));
+    }
+
+    [Fact]
+    public void MissingConfirm_IsRejected()
+    {
+        var options = new SeederCliOptions("small", null, 12345, Confirm: false, Reset: false, ConfirmReset: false, DryRun: true);
+
+        var result = SafetyValidator.Validate(options, "Server=.;Database=BazarFlowPerformance;");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Errors, error => error.Contains("--confirm", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void MissingProfile_IsRejected()
+    {
+        var options = new SeederCliOptions(null, null, 12345, Confirm: true, Reset: false, ConfirmReset: false, DryRun: true);
+
+        var result = SafetyValidator.Validate(options, "Server=.;Database=BazarFlowPerformance;");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Errors, error => error.Contains("--profile", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Reset_RequiresConfirmReset()
+    {
+        var options = new SeederCliOptions("small", null, 12345, Confirm: true, Reset: true, ConfirmReset: false, DryRun: true);
+
+        var result = SafetyValidator.Validate(options, "Server=.;Database=BazarFlowPerformance;");
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Errors, error => error.Contains("--confirm-reset", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ProfileSizes_AreCorrect()
+    {
+        Assert.Equal(new ProfileConfig("small", 10, 5, 500, 3, 3, 1_000), ProfileConfig.Get("small"));
+        Assert.Equal(new ProfileConfig("medium", 50, 30, 5_000, 10, 10, 10_000), ProfileConfig.Get("medium"));
+        Assert.Equal(new ProfileConfig("large", 150, 100, 20_000, 30, 30, 50_000), ProfileConfig.Get("large"));
+    }
+
+    [Fact]
+    public void DeterministicGenerator_SameSeedSameOutput()
+    {
+        var first = SyntheticPreviewGenerator.Barcode(12345, 1);
+        var second = SyntheticPreviewGenerator.Barcode(12345, 1);
+
+        Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void DeterministicGenerator_DifferentSeedDifferentOutput()
+    {
+        var first = SyntheticPreviewGenerator.ProductName(12345, 1);
+        var second = SyntheticPreviewGenerator.ProductName(54321, 1);
+
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public async Task ConnectionStringPassword_IsNotPrinted()
+    {
+        const string password = "super-secret-password";
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exitCode = await PerformanceSeederApp.RunAsync(
+            [
+                "--profile", "small",
+                "--connection", $"Server=.;Database=BazarFlowPerformance;User Id=sa;Password={password};",
+                "--seed", "12345",
+                "--confirm",
+                "--dry-run"
+            ],
+            output,
+            error);
+
+        var combined = output.ToString() + error;
+
+        Assert.Equal(PerformanceSeederExitCodes.Success, exitCode);
+        Assert.DoesNotContain(password, combined);
+        Assert.DoesNotContain("User Id=sa", combined);
+        Assert.Contains("BazarFlowPerformance", combined);
+    }
+
+    [Fact]
+    public void Sanitizer_RedactsPassword()
+    {
+        var sanitized = ConnectionStringInspector.SanitizeForDiagnostics("Server=.;Database=BazarFlowPerformance;User Id=sa;Password=secret;");
+
+        Assert.DoesNotContain("secret", sanitized);
+        Assert.Contains("<redacted>", sanitized);
+    }
+}
