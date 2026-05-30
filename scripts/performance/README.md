@@ -15,7 +15,7 @@ Current status:
 - V2-06A creates documentation artifacts only.
 - No load test implementation exists here yet.
 - V2-06B-1 seed skeleton exists at `backend/tools/BazarFlow.PerformanceSeeder`; `scripts/performance/seed` documents how to run it.
-- No SQL DMV scripts exist here yet.
+- V2-06C diagnostics collector exists at `scripts/performance/diagnostics/bazarflow-db-diagnostics.sql`.
 - No orchestration scripts exist here yet.
 
 Safety rules:
@@ -24,6 +24,7 @@ Safety rules:
 - Do not use real customer data.
 - Do not run destructive database reset commands without explicit confirmation.
 - Do not run stress tests on a production machine.
+- Treat diagnostics output as operational data. Do not publish it outside the team without review.
 - Do not include these assets in the installer unless explicitly approved later.
 
-Implementation of executable performance assets is deferred to V2-06B/C and later phases.
+Load-test execution assets remain deferred to later phases.
