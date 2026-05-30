@@ -230,4 +230,54 @@ public class PerformanceSeederTests
         Assert.DoesNotContain("secret", sanitized);
         Assert.Contains("<redacted>", sanitized);
     }
+
+    [Fact]
+    public async Task WriteFailure_PrintsClassifiedSanitizedError()
+    {
+        const string password = "top-secret";
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exitCode = await PerformanceSeederApp.RunAsync(
+            [
+                "--profile", "small",
+                "--connection", $"Server=.;Database=BazarFlowPerformance;User Id=sa;Password={password};",
+                "--confirm"
+            ],
+            output,
+            error,
+            _ => new ThrowingReferenceDataWriter(new InvalidOperationException(
+                "An exception has been raised that is likely due to a transient failure.",
+                new Exception($"A network-related error occurred. User Id=sa;Password={password};"))));
+
+        var text = error.ToString();
+
+        Assert.Equal(PerformanceSeederExitCodes.SeedFailed, exitCode);
+        Assert.Contains("SQL_CONNECTION_FAILED", text);
+        Assert.Contains("InvalidOperationException", text);
+        Assert.Contains("Inner exception: Exception", text);
+        Assert.Contains("Run BazarFlow.DbMigrator against the performance database before seeding.", text);
+        Assert.DoesNotContain(password, text);
+        Assert.DoesNotContain("User Id=sa", text);
+    }
+
+    private sealed class ThrowingReferenceDataWriter : IReferenceDataWriter
+    {
+        private readonly Exception _exception;
+
+        public ThrowingReferenceDataWriter(Exception exception)
+        {
+            _exception = exception;
+        }
+
+        public Task<ReferenceDataSeedResult> SeedAsync(ReferenceDataPlan plan, TextWriter output, CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
+        }
+    }
 }

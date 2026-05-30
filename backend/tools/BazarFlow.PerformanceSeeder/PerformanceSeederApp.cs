@@ -65,7 +65,7 @@ public static class PerformanceSeederApp
         }
         catch (Exception ex)
         {
-            error.WriteLine($"Reference data generation failed: {ex.GetType().Name}: {ex.Message}");
+            DbWriteErrorFormatter.Write(error, ex);
             return PerformanceSeederExitCodes.SeedFailed;
         }
     }
