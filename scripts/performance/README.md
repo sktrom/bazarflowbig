@@ -14,7 +14,7 @@ Current status:
 
 - V2-06A creates documentation artifacts only.
 - No load test implementation exists here yet.
-- No seed generator exists here yet.
+- V2-06B-1 seed skeleton exists at `backend/tools/BazarFlow.PerformanceSeeder`; `scripts/performance/seed` documents how to run it.
 - No SQL DMV scripts exist here yet.
 - No orchestration scripts exist here yet.
 
