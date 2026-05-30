@@ -51,7 +51,7 @@ public static class PerformanceSeederApp
 
         if (options.Reset)
         {
-            error.WriteLine("Reset is not implemented in V2-06B-3A. Remove --reset.");
+            error.WriteLine("Reset is not implemented in V2-06B-3B. Remove --reset.");
             return PerformanceSeederExitCodes.ImplementationPending;
         }
 
@@ -66,6 +66,10 @@ public static class PerformanceSeederApp
                 output.WriteLine("Starting transactional purchase/product batch generation.");
                 var purchaseResult = await writer.SeedPurchasesAsync(seed, profile, output, cancellationToken);
                 PrintPurchaseSummary(output, purchaseResult);
+
+                output.WriteLine("Starting transactional invoice/invoice line generation.");
+                var invoiceResult = await writer.SeedInvoicesAsync(seed, profile, output, cancellationToken);
+                PrintInvoiceSummary(output, invoiceResult);
             }
 
             return PerformanceSeederExitCodes.Success;
@@ -80,10 +84,10 @@ public static class PerformanceSeederApp
     private static void PrintWarning(TextWriter output, SeederCliOptions options, string databaseName, int seed)
     {
         output.WriteLine("============================================================");
-        output.WriteLine(" BazarFlow Performance Seeder - V2-06B-3A PURCHASE TRANSACTIONS");
+        output.WriteLine(" BazarFlow Performance Seeder - V2-06B-3B SALES TRANSACTIONS");
         output.WriteLine(" Synthetic data only. Production databases are forbidden.");
         output.WriteLine(" Writes are limited to categories, suppliers, products, employees, and devices.");
-        output.WriteLine(" Purchases and product batches are generated only when --include-transactions is used.");
+        output.WriteLine(" Purchases, product batches, invoices, and invoice lines are generated only when --include-transactions is used.");
         output.WriteLine(" Reset operations are not implemented.");
         output.WriteLine("============================================================");
         output.WriteLine($"Profile: {options.Profile}");
@@ -102,7 +106,7 @@ public static class PerformanceSeederApp
         output.WriteLine($"Reset enabled: {reset}");
         if (reset)
         {
-            output.WriteLine("Reset is deferred. No reset is executed in V2-06B-2.");
+            output.WriteLine("Reset is deferred. No reset is executed in V2-06B-3B.");
         }
 
         output.WriteLine("Counts:");
@@ -147,6 +151,18 @@ public static class PerformanceSeederApp
             output.WriteLine($"  Planned product batches: {transactionProfile.MinimumPurchaseLines}-{transactionProfile.MaximumPurchaseLines}");
             output.WriteLine($"  Sample purchase number: {PurchaseDataGenerator.PurchaseInvoiceNumber(plan.Seed, 1)}");
             output.WriteLine($"  Sample external invoice number: {PurchaseDataGenerator.PurchaseExternalInvoiceNumber(plan.Seed, 1)}");
+            output.WriteLine($"  Planned invoices: {transactionProfile.Invoices}");
+            output.WriteLine($"  Planned invoice lines: {transactionProfile.MinimumInvoiceLines}-{transactionProfile.MaximumInvoiceLines}");
+            output.WriteLine($"  Sample invoice number: {InvoiceDataGenerator.InvoiceNumber(plan.Seed, 1)}");
+            var sampleProducts = plan.Products.Take(3)
+                .Select((product, index) => new SyntheticProductRef(index + 1, product.Barcode, product.PriceUsd, product.HasExpiry))
+                .ToList();
+            var sampleEmployees = plan.Employees.Take(1)
+                .Select((employee, index) => new SyntheticEmployeeRef(index + 1, employee.Username))
+                .ToList();
+            var sampleInvoice = InvoiceDataGenerator.Generate(plan.Seed, transactionProfile, sampleProducts, sampleEmployees, count: 1).Invoices[0];
+            output.WriteLine($"  Sample invoice date: {sampleInvoice.CreatedAt:O}");
+            output.WriteLine($"  Sample invoice total: {sampleInvoice.TotalUsd}");
         }
     }
 
@@ -166,5 +182,12 @@ public static class PerformanceSeederApp
         output.WriteLine($"Purchases: planned={result.Purchases.Planned}, existing={result.Purchases.Existing}, inserted={result.Purchases.Inserted}");
         output.WriteLine($"PurchaseLines: planned={result.PurchaseLines.Planned}, existing={result.PurchaseLines.Existing}, inserted={result.PurchaseLines.Inserted}");
         output.WriteLine($"ProductBatches: planned={result.ProductBatches.Planned}, existing={result.ProductBatches.Existing}, inserted={result.ProductBatches.Inserted}");
+    }
+
+    private static void PrintInvoiceSummary(TextWriter output, InvoiceSeedResult result)
+    {
+        output.WriteLine("Transactional invoice/invoice line generation complete.");
+        output.WriteLine($"Invoices: planned={result.Invoices.Planned}, existing={result.Invoices.Existing}, inserted={result.Invoices.Inserted}");
+        output.WriteLine($"InvoiceLines: planned={result.InvoiceLines.Planned}, existing={result.InvoiceLines.Existing}, inserted={result.InvoiceLines.Inserted}");
     }
 }

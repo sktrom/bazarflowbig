@@ -106,6 +106,79 @@ public class PerformanceSeederReferenceDataWriterTests
         Assert.Equal(1, await db.PurchaseInvoices.CountAsync(invoice => invoice.InvoiceNumber == "REAL-PUR-1"));
     }
 
+    [Fact]
+    public async Task SeedInvoicesAsync_RefusesWhenProductsMissing()
+    {
+        await using var db = CreateInMemoryDbContext();
+        await using var writer = new EfReferenceDataWriter(db);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => writer.SeedInvoicesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null));
+
+        Assert.Equal("Run core reference data generation first.", exception.Message);
+    }
+
+    [Fact]
+    public async Task SeedInvoicesAsync_SecondRunDoesNotDuplicateInvoicesOrLines()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+        await writer.SeedInvoicesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedInvoicesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+
+        var transactionProfile = TransactionProfileConfig.Get("small");
+        var invoiceIds = await db.Invoices
+            .Where(invoice => invoice.InvoiceNumber.StartsWith("BF-PERF-INV-12345-"))
+            .Select(invoice => invoice.Id)
+            .ToListAsync();
+        Assert.Equal(transactionProfile.Invoices, invoiceIds.Count);
+
+        var lineCount = await db.InvoiceLines.CountAsync(line => invoiceIds.Contains(line.InvoiceId));
+        Assert.InRange(lineCount, transactionProfile.MinimumInvoiceLines, transactionProfile.MaximumInvoiceLines);
+    }
+
+    [Fact]
+    public async Task SeedInvoicesAsync_DoesNotModifyNonSyntheticInvoices()
+    {
+        await using var db = CreateInMemoryDbContext();
+        db.Employees.Add(new Employee
+        {
+            Id = 999,
+            FullName = "Real Employee",
+            Username = "real.employee",
+            PasswordHash = "hash",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+        db.Invoices.Add(new Invoice
+        {
+            InvoiceNumber = "REAL-INV-1",
+            OriginalEmployeeId = 999,
+            Status = InvoiceStatus.Completed,
+            SubtotalUsd = 10m,
+            TotalUsd = 10m,
+            HasManualPriceEdit = false,
+            HasAdjustmentRequest = false,
+            CreatedAt = DateTime.UtcNow,
+            CompletedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+        await writer.SeedInvoicesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+
+        var realInvoice = await db.Invoices.SingleAsync(invoice => invoice.InvoiceNumber == "REAL-INV-1");
+        Assert.Equal(10m, realInvoice.TotalUsd);
+        Assert.Equal(1, await db.Invoices.CountAsync(invoice => invoice.InvoiceNumber == "REAL-INV-1"));
+    }
+
     private static SupermarketDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<SupermarketDbContext>()

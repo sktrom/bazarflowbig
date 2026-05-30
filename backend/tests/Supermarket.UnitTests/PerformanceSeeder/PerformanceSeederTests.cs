@@ -1,4 +1,5 @@
 using BazarFlow.PerformanceSeeder;
+using Supermarket.Domain.Enums;
 using Xunit;
 
 namespace Supermarket.UnitTests.PerformanceSeeder;
@@ -228,7 +229,7 @@ public class PerformanceSeederTests
             _ => throw new InvalidOperationException("Writer should not be opened when reset is deferred."));
 
         Assert.Equal(PerformanceSeederExitCodes.ImplementationPending, exitCode);
-        Assert.Contains("Reset is not implemented in V2-06B-3A", error.ToString());
+        Assert.Contains("Reset is not implemented in V2-06B-3B", error.ToString());
     }
 
     [Fact]
@@ -278,6 +279,81 @@ public class PerformanceSeederTests
             Assert.InRange(line.Quantity, 10, 500);
             Assert.StartsWith("BF-PERF-", line.ProductBarcode);
         });
+    }
+
+    [Fact]
+    public void InvoiceNumbers_AreDeterministicAndUnique()
+    {
+        var first = CreateSmallInvoicePlan(12345);
+        var second = CreateSmallInvoicePlan(12345);
+
+        Assert.Equal(first.Invoices.Select(i => i.InvoiceNumber), second.Invoices.Select(i => i.InvoiceNumber));
+        Assert.Equal(first.Invoices.Count, first.Invoices.Select(i => i.InvoiceNumber).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void InvoiceGenerator_DifferentSeedDifferentOutput()
+    {
+        var first = CreateSmallInvoicePlan(12345);
+        var second = CreateSmallInvoicePlan(54321);
+
+        Assert.NotEqual(first.Invoices[0].InvoiceNumber, second.Invoices[0].InvoiceNumber);
+    }
+
+    [Fact]
+    public void InvoiceDates_AreWithinProfileWindow()
+    {
+        var plan = CreateSmallInvoicePlan(12345);
+        var earliest = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc).AddDays(-TransactionProfileConfig.Get("small").DateWindowDays);
+        var latest = new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.All(plan.Invoices, invoice =>
+        {
+            Assert.True(invoice.CreatedAt >= earliest);
+            Assert.True(invoice.CreatedAt < latest);
+            Assert.True(invoice.CompletedAt >= invoice.CreatedAt);
+        });
+    }
+
+    [Fact]
+    public void InvoiceLineCountsAndQuantities_AreInRange()
+    {
+        var plan = CreateSmallInvoicePlan(12345);
+        var profile = TransactionProfileConfig.Get("small");
+
+        Assert.All(plan.Invoices, invoice => Assert.InRange(invoice.Lines.Count, profile.MinLinesPerInvoice, profile.MaxLinesPerInvoice));
+        Assert.All(plan.Invoices.SelectMany(i => i.Lines), line => Assert.InRange(line.Quantity, 1, 10));
+    }
+
+    [Fact]
+    public void InvoiceTotals_AreCorrectAndNeverNegative()
+    {
+        var plan = CreateSmallInvoicePlan(12345);
+
+        Assert.All(plan.Invoices, invoice =>
+        {
+            Assert.Equal(invoice.Lines.Sum(line => line.LineTotalUsdEffective), invoice.SubtotalUsd);
+            Assert.Equal(invoice.SubtotalUsd, invoice.TotalUsd);
+            Assert.True(invoice.TotalUsd > 0);
+        });
+    }
+
+    [Fact]
+    public void InvoiceLines_UseSyntheticProductsOnly()
+    {
+        var plan = CreateSmallInvoicePlan(12345);
+
+        Assert.All(plan.Invoices.SelectMany(i => i.Lines), line => Assert.StartsWith("BF-PERF-", line.ProductBarcode));
+    }
+
+    [Fact]
+    public void InvoiceStatuses_UseAllowedDistributionOnly()
+    {
+        var plan = CreateSmallInvoicePlan(12345);
+        var allowed = new[] { InvoiceStatus.Completed, InvoiceStatus.Modified, InvoiceStatus.Cancelled };
+
+        Assert.All(plan.Invoices, invoice => Assert.Contains(invoice.Status, allowed));
+        Assert.DoesNotContain(plan.Invoices, invoice => invoice.Status is InvoiceStatus.Working or InvoiceStatus.Suspended);
     }
 
     [Fact]
@@ -364,6 +440,11 @@ public class PerformanceSeederTests
             throw _exception;
         }
 
+        public Task<InvoiceSeedResult> SeedInvoicesAsync(int seed, ProfileConfig profile, TextWriter output, CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;
@@ -383,5 +464,17 @@ public class PerformanceSeederTests
             .ToList();
 
         return PurchaseDataGenerator.Generate(seed, TransactionProfileConfig.Get("small"), products, suppliers, employees);
+    }
+
+    private static InvoicePlan CreateSmallInvoicePlan(int seed)
+    {
+        var products = Enumerable.Range(1, 20)
+            .Select(index => new SyntheticProductRef(index, SyntheticPreviewGenerator.Barcode(seed, index), 10m + index, index % 3 == 0))
+            .ToList();
+        var employees = Enumerable.Range(1, 3)
+            .Select(index => new SyntheticEmployeeRef(index, SyntheticPreviewGenerator.EmployeeUsername(seed, index)))
+            .ToList();
+
+        return InvoiceDataGenerator.Generate(seed, TransactionProfileConfig.Get("small"), products, employees);
     }
 }

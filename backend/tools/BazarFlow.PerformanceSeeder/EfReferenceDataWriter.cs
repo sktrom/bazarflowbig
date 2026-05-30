@@ -10,6 +10,7 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
 {
     private const int ProductBatchSize = 1_000;
     private const int PurchaseBatchSize = 250;
+    private const int MaxInvoiceLinesPerBatch = 10_000;
     private readonly SupermarketDbContext _context;
     private readonly PasswordHasher _passwordHasher = new();
 
@@ -150,6 +151,121 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
             PrintProgress(output, lineResult);
             PrintProgress(output, batchResult);
             return new PurchaseSeedResult(purchaseResult, lineResult, batchResult);
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetectChanges;
+        }
+    }
+
+    public async Task<InvoiceSeedResult> SeedInvoicesAsync(
+        int seed,
+        ProfileConfig profile,
+        TextWriter output,
+        CancellationToken cancellationToken = default)
+    {
+        var previousAutoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+
+        try
+        {
+            var transactionProfile = TransactionProfileConfig.Get(profile.Name);
+            var refs = await LoadSyntheticSalesReferencesAsync(seed, profile, cancellationToken);
+            var seedToken = SyntheticPreviewGenerator.SeedToken(seed);
+            var invoicePrefix = $"BF-PERF-INV-{seedToken}-";
+
+            var syntheticBatchCount = await _context.ProductBatches
+                .AsNoTracking()
+                .CountAsync(batch => batch.EntryInvoiceNumber != null && batch.EntryInvoiceNumber.StartsWith($"BF-PERF-EXT-PUR-{seedToken}-"), cancellationToken);
+            if (syntheticBatchCount == 0)
+            {
+                output.WriteLine("Warning: Stock allocation is deferred. ProductBatch consumption will not be updated in V2-06B-3B.");
+            }
+
+            var existingInvoiceNumbers = await _context.Invoices
+                .AsNoTracking()
+                .Where(invoice => invoice.InvoiceNumber.StartsWith(invoicePrefix))
+                .Select(invoice => invoice.InvoiceNumber)
+                .ToListAsync(cancellationToken);
+            var existingSet = existingInvoiceNumbers.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingInvoiceLines = await _context.InvoiceLines
+                .AsNoTracking()
+                .CountAsync(line => line.Invoice != null && line.Invoice.InvoiceNumber.StartsWith(invoicePrefix), cancellationToken);
+
+            var invoiceBatchSize = Math.Clamp(MaxInvoiceLinesPerBatch / transactionProfile.MaxLinesPerInvoice, 1, 1_000);
+            var insertedInvoices = 0;
+            var insertedLines = 0;
+            var plannedLines = 0;
+
+            for (var startIndex = 1; startIndex <= transactionProfile.Invoices; startIndex += invoiceBatchSize)
+            {
+                var count = Math.Min(invoiceBatchSize, transactionProfile.Invoices - startIndex + 1);
+                var plan = InvoiceDataGenerator.Generate(seed, transactionProfile, refs.Products, refs.Employees, startIndex, count);
+                plannedLines += plan.InvoiceLineCount;
+                var newInvoices = plan.Invoices
+                    .Where(invoice => !existingSet.Contains(invoice.InvoiceNumber))
+                    .Select(invoice => new Invoice
+                    {
+                        InvoiceNumber = invoice.InvoiceNumber,
+                        OriginalEmployeeId = invoice.EmployeeId,
+                        CustomerName = invoice.CustomerName,
+                        Status = invoice.Status,
+                        SuspensionReason = null,
+                        InvoiceDiscountType = null,
+                        InvoiceDiscountValue = null,
+                        SubtotalUsd = invoice.SubtotalUsd,
+                        TotalUsd = invoice.TotalUsd,
+                        ExchangeRateSypSnapshot = null,
+                        TotalSyp = null,
+                        HasManualPriceEdit = invoice.HasManualPriceEdit,
+                        HasAdjustmentRequest = false,
+                        CreatedAt = invoice.CreatedAt,
+                        CompletedAt = invoice.CompletedAt,
+                        // No stock allocation is created in V2-06B-3B.
+                    })
+                    .ToList();
+
+                if (newInvoices.Count == 0)
+                {
+                    continue;
+                }
+
+                var invoiceByNumber = plan.Invoices.ToDictionary(invoice => invoice.InvoiceNumber, StringComparer.OrdinalIgnoreCase);
+                _context.Invoices.AddRange(newInvoices);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                var lines = new List<InvoiceLine>();
+                foreach (var invoiceEntity in newInvoices)
+                {
+                    var source = invoiceByNumber[invoiceEntity.InvoiceNumber];
+                    lines.AddRange(source.Lines.Select(line => new InvoiceLine
+                    {
+                        InvoiceId = invoiceEntity.Id,
+                        ProductId = line.ProductId,
+                        OfferId = null,
+                        Quantity = line.Quantity,
+                        UnitPriceUsdOriginal = line.UnitPriceUsdOriginal,
+                        LineTotalUsdOriginal = line.LineTotalUsdOriginal,
+                        LineTotalUsdEffective = line.LineTotalUsdEffective,
+                        IsPriceOverridden = false,
+                        SortOrder = line.SortOrder
+                    }));
+                }
+
+                _context.InvoiceLines.AddRange(lines);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                insertedInvoices += newInvoices.Count;
+                insertedLines += lines.Count;
+                _context.ChangeTracker.Clear();
+                output.WriteLine($"Invoices batch inserted: {insertedInvoices}/{transactionProfile.Invoices}");
+            }
+
+            var invoiceResult = new EntitySeedResult("Invoices", transactionProfile.Invoices, existingSet.Count, insertedInvoices);
+            var lineResult = new EntitySeedResult("InvoiceLines", plannedLines, existingInvoiceLines, insertedLines);
+            PrintProgress(output, invoiceResult);
+            PrintProgress(output, lineResult);
+            return new InvoiceSeedResult(invoiceResult, lineResult);
         }
         finally
         {
@@ -407,8 +523,40 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
         return new SyntheticReferenceSet(products, suppliers, employees);
     }
 
+    private async Task<SyntheticSalesReferenceSet> LoadSyntheticSalesReferencesAsync(
+        int seed,
+        ProfileConfig profile,
+        CancellationToken cancellationToken)
+    {
+        var seedToken = SyntheticPreviewGenerator.SeedToken(seed);
+        var products = await _context.Products
+            .AsNoTracking()
+            .Where(product => product.Barcode.StartsWith($"BF-PERF-{seedToken}-"))
+            .OrderBy(product => product.Barcode)
+            .Select(product => new SyntheticProductRef(product.Id, product.Barcode, product.PriceUsd, product.HasExpiry))
+            .ToListAsync(cancellationToken);
+
+        var employees = await _context.Employees
+            .AsNoTracking()
+            .Where(employee => employee.Username.EndsWith($".{seedToken}@example.test"))
+            .OrderBy(employee => employee.Username)
+            .Select(employee => new SyntheticEmployeeRef(employee.Id, employee.Username))
+            .ToListAsync(cancellationToken);
+
+        if (products.Count < profile.Products || employees.Count < profile.Employees)
+        {
+            throw new InvalidOperationException("Run core reference data generation first.");
+        }
+
+        return new SyntheticSalesReferenceSet(products, employees);
+    }
+
     private sealed record SyntheticReferenceSet(
         IReadOnlyList<SyntheticProductRef> Products,
         IReadOnlyList<SyntheticSupplierRef> Suppliers,
+        IReadOnlyList<SyntheticEmployeeRef> Employees);
+
+    private sealed record SyntheticSalesReferenceSet(
+        IReadOnlyList<SyntheticProductRef> Products,
         IReadOnlyList<SyntheticEmployeeRef> Employees);
 }
