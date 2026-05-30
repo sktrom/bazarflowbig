@@ -113,5 +113,21 @@ namespace Supermarket.IntegrationTests.Auth
         {
             return (string)value.GetType().GetProperty("error")!.GetValue(value)!;
         }
+
+        [Fact]
+        public async Task Post_Login_WithoutSession_DoesNotReturn403()
+        {
+            // Simulate successful login
+            _authServiceMock
+                .Setup(s => s.LoginAsync(It.IsAny<LoginRequest>(), It.IsAny<string>(), It.IsAny<string>()))
+                .ReturnsAsync(new LoginResponse { SessionToken = "token" });
+            
+            var controller = CreateController();
+
+            var result = await controller.Login(LoginRequest());
+
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            Assert.Equal(200, okResult.StatusCode);
+        }
     }
 }
