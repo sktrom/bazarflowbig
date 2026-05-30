@@ -2,7 +2,15 @@
 
 `BazarFlow.PerformanceSeeder` is a standalone console tool for preparing synthetic performance datasets.
 
-Current status: `V2-06B-1` skeleton only. It validates CLI options, validates database safety rules, and prints deterministic dry-run previews. It does not write to the database and does not reset data.
+Current status: `V2-06B-2`. It validates CLI options, validates database safety rules, prints deterministic dry-run previews, and can insert core synthetic reference data only:
+
+- Categories
+- Suppliers
+- Products
+- Employees test users
+- POS devices
+
+It does not create invoices, purchases, inventory movements, blackbox events, or audit logs. It does not reset data.
 
 ## Safety Warnings
 
@@ -12,15 +20,17 @@ Current status: `V2-06B-1` skeleton only. It validates CLI options, validates da
 - `--confirm` is required for every run.
 - A database name must contain one of: `Performance`, `Perf`, `Test`, `Load`.
 - Production-like database names are rejected, including `BazarFlow`, `BazarFlowProd`, `Production`, and `Prod`.
-- Reset is not implemented in `V2-06B-1`. If `--reset` is passed, `--confirm-reset` is still required and dry-run output only says reset would run in a future phase.
+- Reset is not implemented in `V2-06B-2`. If `--reset` is passed in non-dry-run mode, the tool refuses to run writes and asks you to remove `--reset`.
+- The tool is not included in the production installer.
+- Employees use synthetic `example.test` usernames. If login is needed for performance environments, the test-only password is `PerformanceTest!123`; only its hash is stored and the raw password is not printed at runtime.
 
 ## Supported Profiles
 
-| Profile | Categories | Suppliers | Products | Employees | Devices | Invoices |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| small | 10 | 5 | 500 | 3 | 3 | 1,000 |
-| medium | 50 | 30 | 5,000 | 10 | 10 | 10,000 |
-| large | 150 | 100 | 20,000 | 30 | 30 | 50,000 |
+| Profile | Categories | Suppliers | Products | Employees | Devices |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| small | 10 | 5 | 500 | 3 | 3 |
+| medium | 50 | 30 | 5,000 | 10 | 10 |
+| large | 150 | 100 | 20,000 | 30 | 30 |
 
 ## CLI Options
 
@@ -57,10 +67,25 @@ Reset validation preview:
 dotnet run --project backend/tools/BazarFlow.PerformanceSeeder -- --profile small --connection "Server=.;Database=BazarFlowPerformance;Trusted_Connection=True;TrustServerCertificate=True" --reset --confirm-reset --confirm --dry-run
 ```
 
+## Write Mode Examples
+
+Write mode is insert-only and idempotent. It inserts missing synthetic rows with `BF-PERF` identifiers and skips existing rows for the same seed/profile.
+
+```powershell
+dotnet run --project backend/tools/BazarFlow.PerformanceSeeder -- --profile small --connection "Server=.;Database=BazarFlowPerformance;Trusted_Connection=True;TrustServerCertificate=True" --seed 12345 --confirm
+```
+
+Using the environment variable:
+
+```powershell
+$env:BAZARFLOW_PERF_SEED_CONNECTION="Server=.;Database=BazarFlowPerf;Trusted_Connection=True;TrustServerCertificate=True"
+dotnet run --project backend/tools/BazarFlow.PerformanceSeeder -- --profile medium --seed 12345 --confirm
+```
+
+Do not use `--reset` in write mode. Reset is deferred to a future phase.
+
 ## Future Phases
 
-- Add schema-aware synthetic data generation.
-- Add batched database writes for safe test/performance databases only.
 - Add synthetic-only reset support with double confirmation.
-- Add inventory movement, blackbox event, and audit log generation where schema constraints allow.
+- Add invoices, purchases, inventory movement, blackbox event, and audit log generation where schema constraints allow.
 - Keep this tool out of production installers unless explicitly approved later.

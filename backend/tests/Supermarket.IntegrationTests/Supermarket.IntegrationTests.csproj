@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Supermarket.Infrastructure\Supermarket.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Supermarket.Api\Supermarket.Api.csproj" />
+    <ProjectReference Include="..\..\tools\BazarFlow.PerformanceSeeder\BazarFlow.PerformanceSeeder.csproj" />
   </ItemGroup>
 
 </Project>

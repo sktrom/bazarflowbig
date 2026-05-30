@@ -5,4 +5,5 @@ public static class PerformanceSeederExitCodes
     public const int Success = 0;
     public const int ValidationFailed = 2;
     public const int ImplementationPending = 3;
+    public const int SeedFailed = 4;
 }

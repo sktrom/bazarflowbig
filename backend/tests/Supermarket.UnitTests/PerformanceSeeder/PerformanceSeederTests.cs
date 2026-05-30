@@ -69,6 +69,31 @@ public class PerformanceSeederTests
     }
 
     [Fact]
+    public void GeneratedBarcodes_AreUniqueForLargeProfile()
+    {
+        var plan = ReferenceDataGenerator.Generate(ProfileConfig.Get("large"), 12345);
+
+        Assert.Equal(plan.Products.Count, plan.Products.Select(product => product.Barcode).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void GeneratedDeviceCodes_AreUniqueForLargeProfile()
+    {
+        var plan = ReferenceDataGenerator.Generate(ProfileConfig.Get("large"), 12345);
+
+        Assert.Equal(plan.Devices.Count, plan.Devices.Select(device => device.DeviceCode).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void GeneratedEmployeeUsernames_AreUniqueForLargeProfile()
+    {
+        var plan = ReferenceDataGenerator.Generate(ProfileConfig.Get("large"), 12345);
+
+        Assert.Equal(plan.Employees.Count, plan.Employees.Select(employee => employee.Username).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(plan.Employees, employee => Assert.EndsWith("@example.test", employee.Username));
+    }
+
+    [Fact]
     public void DeterministicGenerator_SameSeedSameOutput()
     {
         var first = SyntheticPreviewGenerator.Barcode(12345, 1);
@@ -84,6 +109,91 @@ public class PerformanceSeederTests
         var second = SyntheticPreviewGenerator.ProductName(54321, 1);
 
         Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void ReferenceDataGenerator_SameSeedSameGeneratedData()
+    {
+        var first = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        var second = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+
+        Assert.Equal(first.Products.Select(product => product.Barcode), second.Products.Select(product => product.Barcode));
+        Assert.Equal(first.Devices.Select(device => device.DeviceCode), second.Devices.Select(device => device.DeviceCode));
+        Assert.Equal(first.Employees.Select(employee => employee.Username), second.Employees.Select(employee => employee.Username));
+    }
+
+    [Fact]
+    public void ReferenceDataGenerator_DifferentSeedDifferentGeneratedData()
+    {
+        var first = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        var second = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 54321);
+
+        Assert.NotEqual(first.Products[0].Barcode, second.Products[0].Barcode);
+        Assert.NotEqual(first.Devices[0].DeviceCode, second.Devices[0].DeviceCode);
+        Assert.NotEqual(first.Employees[0].Username, second.Employees[0].Username);
+    }
+
+    [Fact]
+    public async Task DryRun_DoesNotOpenWriter()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exitCode = await PerformanceSeederApp.RunAsync(
+            [
+                "--profile", "small",
+                "--connection", "Server=.;Database=BazarFlowPerformance;",
+                "--confirm",
+                "--dry-run"
+            ],
+            output,
+            error,
+            _ => throw new InvalidOperationException("Writer should not be opened during dry-run."));
+
+        Assert.Equal(PerformanceSeederExitCodes.Success, exitCode);
+        Assert.Contains("Dry-run summary", output.ToString());
+    }
+
+    [Fact]
+    public async Task UnsafeDatabaseName_PreventsWriter()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exitCode = await PerformanceSeederApp.RunAsync(
+            [
+                "--profile", "small",
+                "--connection", "Server=.;Database=BazarFlow;",
+                "--confirm"
+            ],
+            output,
+            error,
+            _ => throw new InvalidOperationException("Writer should not be opened for unsafe database names."));
+
+        Assert.Equal(PerformanceSeederExitCodes.ValidationFailed, exitCode);
+        Assert.Contains("Refusing database", error.ToString());
+    }
+
+    [Fact]
+    public async Task ResetNonDryRun_IsRejectedBeforeWriter()
+    {
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        var exitCode = await PerformanceSeederApp.RunAsync(
+            [
+                "--profile", "small",
+                "--connection", "Server=.;Database=BazarFlowPerformance;",
+                "--confirm",
+                "--reset",
+                "--confirm-reset"
+            ],
+            output,
+            error,
+            _ => throw new InvalidOperationException("Writer should not be opened when reset is deferred."));
+
+        Assert.Equal(PerformanceSeederExitCodes.ImplementationPending, exitCode);
+        Assert.Contains("Reset is not implemented in V2-06B-2", error.ToString());
     }
 
     [Fact]
