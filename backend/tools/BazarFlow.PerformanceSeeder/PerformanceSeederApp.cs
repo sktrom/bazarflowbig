@@ -51,7 +51,7 @@ public static class PerformanceSeederApp
 
         if (options.Reset)
         {
-            error.WriteLine("Reset is not implemented in V2-06B-3B. Remove --reset.");
+            error.WriteLine("Reset is not implemented in V2-06B-3C. Remove --reset.");
             return PerformanceSeederExitCodes.ImplementationPending;
         }
 
@@ -70,6 +70,10 @@ public static class PerformanceSeederApp
                 output.WriteLine("Starting transactional invoice/invoice line generation.");
                 var invoiceResult = await writer.SeedInvoicesAsync(seed, profile, output, cancellationToken);
                 PrintInvoiceSummary(output, invoiceResult);
+
+                output.WriteLine("Starting transactional blackbox event generation.");
+                var blackBoxResult = await writer.SeedBlackBoxEventsAsync(seed, profile, output, cancellationToken);
+                PrintBlackBoxSummary(output, blackBoxResult);
             }
 
             return PerformanceSeederExitCodes.Success;
@@ -84,10 +88,10 @@ public static class PerformanceSeederApp
     private static void PrintWarning(TextWriter output, SeederCliOptions options, string databaseName, int seed)
     {
         output.WriteLine("============================================================");
-        output.WriteLine(" BazarFlow Performance Seeder - V2-06B-3B SALES TRANSACTIONS");
+        output.WriteLine(" BazarFlow Performance Seeder - V2-06B-3C BLACKBOX EVENTS");
         output.WriteLine(" Synthetic data only. Production databases are forbidden.");
-        output.WriteLine(" Writes are limited to categories, suppliers, products, employees, and devices.");
-        output.WriteLine(" Purchases, product batches, invoices, and invoice lines are generated only when --include-transactions is used.");
+        output.WriteLine(" Core writes are limited to categories, suppliers, products, employees, and devices.");
+        output.WriteLine(" Purchases, product batches, invoices, invoice lines, and blackbox events are generated only when --include-transactions is used.");
         output.WriteLine(" Reset operations are not implemented.");
         output.WriteLine("============================================================");
         output.WriteLine($"Profile: {options.Profile}");
@@ -106,7 +110,7 @@ public static class PerformanceSeederApp
         output.WriteLine($"Reset enabled: {reset}");
         if (reset)
         {
-            output.WriteLine("Reset is deferred. No reset is executed in V2-06B-3B.");
+            output.WriteLine("Reset is deferred. No reset is executed in V2-06B-3C.");
         }
 
         output.WriteLine("Counts:");
@@ -163,6 +167,30 @@ public static class PerformanceSeederApp
             var sampleInvoice = InvoiceDataGenerator.Generate(plan.Seed, transactionProfile, sampleProducts, sampleEmployees, count: 1).Invoices[0];
             output.WriteLine($"  Sample invoice date: {sampleInvoice.CreatedAt:O}");
             output.WriteLine($"  Sample invoice total: {sampleInvoice.TotalUsd}");
+            var sampleDevices = plan.Devices.Take(1)
+                .Select((device, index) => new SyntheticDeviceRef(index + 1, device.DeviceCode))
+                .ToList();
+            var sampleInvoices = new[]
+            {
+                new SyntheticInvoiceRef(1, sampleInvoice.InvoiceNumber, sampleInvoice.CreatedAt, sampleInvoice.CompletedAt)
+            };
+            var samplePurchases = new[]
+            {
+                new SyntheticPurchaseRef(1, PurchaseDataGenerator.PurchaseInvoiceNumber(plan.Seed, 1), sampleInvoice.CreatedAt, sampleInvoice.CompletedAt)
+            };
+            var sampleBlackBox = BlackBoxDataGenerator.Generate(
+                plan.Seed,
+                transactionProfile,
+                sampleProducts,
+                sampleEmployees,
+                sampleDevices,
+                sampleInvoices,
+                samplePurchases,
+                count: 1).Events[0];
+            output.WriteLine($"  Planned blackbox events: {transactionProfile.BlackBoxEvents}");
+            output.WriteLine($"  Sample blackbox action: {sampleBlackBox.ActionType}");
+            output.WriteLine($"  Sample blackbox event key: {BlackBoxDataGenerator.EventKey(plan.Seed, 1)}");
+            output.WriteLine($"  Sample blackbox metadata: {sampleBlackBox.MetadataJson}");
         }
     }
 
@@ -189,5 +217,11 @@ public static class PerformanceSeederApp
         output.WriteLine("Transactional invoice/invoice line generation complete.");
         output.WriteLine($"Invoices: planned={result.Invoices.Planned}, existing={result.Invoices.Existing}, inserted={result.Invoices.Inserted}");
         output.WriteLine($"InvoiceLines: planned={result.InvoiceLines.Planned}, existing={result.InvoiceLines.Existing}, inserted={result.InvoiceLines.Inserted}");
+    }
+
+    private static void PrintBlackBoxSummary(TextWriter output, BlackBoxEventSeedResult result)
+    {
+        output.WriteLine("Transactional blackbox event generation complete.");
+        output.WriteLine($"BlackBoxEvents: planned={result.BlackBoxEvents.Planned}, existing={result.BlackBoxEvents.Existing}, inserted={result.BlackBoxEvents.Inserted}");
     }
 }

@@ -187,7 +187,9 @@ public class PerformanceSeederTests
         Assert.Equal(PerformanceSeederExitCodes.Success, exitCode);
         Assert.Contains("Transactional dry-run", text);
         Assert.Contains("Planned purchases: 100", text);
+        Assert.Contains("Planned blackbox events: 2000", text);
         Assert.Contains("BF-PERF-PUR-12345-000001", text);
+        Assert.Contains("BF-PERF-BBX-12345-000001", text);
     }
 
     [Fact]
@@ -229,7 +231,7 @@ public class PerformanceSeederTests
             _ => throw new InvalidOperationException("Writer should not be opened when reset is deferred."));
 
         Assert.Equal(PerformanceSeederExitCodes.ImplementationPending, exitCode);
-        Assert.Contains("Reset is not implemented in V2-06B-3B", error.ToString());
+        Assert.Contains("Reset is not implemented in V2-06B-3C", error.ToString());
     }
 
     [Fact]
@@ -357,6 +359,107 @@ public class PerformanceSeederTests
     }
 
     [Fact]
+    public void BlackBoxEventKeys_AreDeterministicAndUnique()
+    {
+        var first = CreateSmallBlackBoxPlan(12345);
+        var second = CreateSmallBlackBoxPlan(12345);
+
+        Assert.Equal(first.Events.Select(evt => evt.Message), second.Events.Select(evt => evt.Message));
+        Assert.Equal(first.Events.Count, first.Events.Select(evt => evt.Message).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void BlackBoxGenerator_DifferentSeedDifferentOutput()
+    {
+        var first = CreateSmallBlackBoxPlan(12345);
+        var second = CreateSmallBlackBoxPlan(54321);
+
+        Assert.NotEqual(first.Events[0].Message, second.Events[0].Message);
+        Assert.NotEqual(first.Events[0].MetadataJson, second.Events[0].MetadataJson);
+    }
+
+    [Fact]
+    public void BlackBoxMetadata_IsSafeAndContainsRequiredKeys()
+    {
+        var plan = CreateSmallBlackBoxPlan(12345);
+
+        Assert.All(plan.Events, evt =>
+        {
+            Assert.Contains("\"synthetic\":true", evt.MetadataJson);
+            Assert.Contains("\"source\":\"BazarFlow.PerformanceSeeder\"", evt.MetadataJson);
+            Assert.Contains("\"seed\":12345", evt.MetadataJson);
+            Assert.Contains("\"eventKey\":\"BF-PERF-BBX-12345-", evt.MetadataJson);
+            Assert.False(BlackBoxDataGenerator.ContainsSensitiveMetadataKey(evt.MetadataJson));
+        });
+        Assert.True(BlackBoxDataGenerator.ContainsSensitiveMetadataKey("{\"Password\":\"x\"}"));
+    }
+
+    [Fact]
+    public void BlackBoxActionsAndResults_AreAllowedOnly()
+    {
+        var plan = CreateSmallBlackBoxPlan(12345);
+        var allowedActions = new[]
+        {
+            "COMPLETE_INVOICE",
+            "PRINT_RECEIPT",
+            "LOGIN_SUCCESS",
+            "LOGIN_FAILED",
+            "CREATE_PRODUCT",
+            "UPDATE_PRODUCT",
+            "COMPLETE_PURCHASE",
+            "EXPORT_INVOICES",
+            "CREATE_BACKUP",
+            "FORCE_CLOSE_SESSION"
+        };
+        var allowedResults = new[] { "Success", "Failed", "Blocked", "Cancelled" };
+
+        Assert.All(plan.Events, evt =>
+        {
+            Assert.Contains(evt.ActionType, allowedActions);
+            Assert.Contains(evt.Result, allowedResults);
+        });
+        Assert.All(plan.Events.Where(evt => evt.ActionType == "LOGIN_FAILED"), evt => Assert.Equal("Failed", evt.Result));
+        Assert.All(plan.Events.Where(evt => evt.ActionType != "LOGIN_FAILED"), evt => Assert.Equal("Success", evt.Result));
+    }
+
+    [Fact]
+    public void BlackBoxDates_AreWithinProfileWindow()
+    {
+        var plan = CreateSmallBlackBoxPlan(12345);
+        var earliest = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc).AddDays(-TransactionProfileConfig.Get("small").DateWindowDays);
+        var latest = new DateTime(2026, 5, 31, 0, 0, 0, DateTimeKind.Utc);
+
+        Assert.All(plan.Events, evt =>
+        {
+            Assert.True(evt.CreatedAtUtc >= earliest);
+            Assert.True(evt.CreatedAtUtc < latest);
+            Assert.Equal(DateTimeKind.Utc, evt.CreatedAtUtc.Kind);
+        });
+    }
+
+    [Fact]
+    public void BlackBoxLinkedEvents_UseExpectedEntityTypes()
+    {
+        var plan = CreateSmallBlackBoxPlan(12345);
+
+        Assert.All(plan.Events.Where(evt => evt.ActionType is "COMPLETE_INVOICE" or "PRINT_RECEIPT"), evt =>
+        {
+            Assert.Equal("Invoice", evt.EntityType);
+            Assert.NotNull(evt.EntityId);
+        });
+        Assert.All(plan.Events.Where(evt => evt.ActionType == "COMPLETE_PURCHASE"), evt =>
+        {
+            Assert.Equal("PurchaseInvoice", evt.EntityType);
+            Assert.NotNull(evt.EntityId);
+        });
+        Assert.All(plan.Events.Where(evt => evt.ActionType is "CREATE_PRODUCT" or "UPDATE_PRODUCT"), evt =>
+        {
+            Assert.Equal("Product", evt.EntityType);
+            Assert.NotNull(evt.EntityId);
+        });
+    }
+
+    [Fact]
     public async Task ConnectionStringPassword_IsNotPrinted()
     {
         const string password = "super-secret-password";
@@ -445,6 +548,11 @@ public class PerformanceSeederTests
             throw _exception;
         }
 
+        public Task<BlackBoxEventSeedResult> SeedBlackBoxEventsAsync(int seed, ProfileConfig profile, TextWriter output, CancellationToken cancellationToken = default)
+        {
+            throw _exception;
+        }
+
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;
@@ -476,5 +584,35 @@ public class PerformanceSeederTests
             .ToList();
 
         return InvoiceDataGenerator.Generate(seed, TransactionProfileConfig.Get("small"), products, employees);
+    }
+
+    private static BlackBoxEventPlan CreateSmallBlackBoxPlan(int seed)
+    {
+        var profile = TransactionProfileConfig.Get("small");
+        var products = Enumerable.Range(1, 20)
+            .Select(index => new SyntheticProductRef(index, SyntheticPreviewGenerator.Barcode(seed, index), 10m + index, index % 3 == 0))
+            .ToList();
+        var employees = Enumerable.Range(1, 3)
+            .Select(index => new SyntheticEmployeeRef(index, SyntheticPreviewGenerator.EmployeeUsername(seed, index)))
+            .ToList();
+        var devices = Enumerable.Range(1, 3)
+            .Select(index => new SyntheticDeviceRef(index, SyntheticPreviewGenerator.DeviceCode(seed, index)))
+            .ToList();
+        var invoices = Enumerable.Range(1, 25)
+            .Select(index =>
+            {
+                var createdAt = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc).AddDays(-(index % profile.DateWindowDays));
+                return new SyntheticInvoiceRef(index, InvoiceDataGenerator.InvoiceNumber(seed, index), createdAt, createdAt.AddMinutes(5));
+            })
+            .ToList();
+        var purchases = Enumerable.Range(1, 10)
+            .Select(index =>
+            {
+                var createdAt = new DateTime(2026, 5, 30, 0, 0, 0, DateTimeKind.Utc).AddDays(-(index % profile.DateWindowDays));
+                return new SyntheticPurchaseRef(index, PurchaseDataGenerator.PurchaseInvoiceNumber(seed, index), createdAt, createdAt.AddMinutes(15));
+            })
+            .ToList();
+
+        return BlackBoxDataGenerator.Generate(seed, profile, products, employees, devices, invoices, purchases);
     }
 }

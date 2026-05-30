@@ -11,6 +11,7 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
     private const int ProductBatchSize = 1_000;
     private const int PurchaseBatchSize = 250;
     private const int MaxInvoiceLinesPerBatch = 10_000;
+    private const int BlackBoxEventBatchSize = 10_000;
     private readonly SupermarketDbContext _context;
     private readonly PasswordHasher _passwordHasher = new();
 
@@ -179,7 +180,7 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
                 .CountAsync(batch => batch.EntryInvoiceNumber != null && batch.EntryInvoiceNumber.StartsWith($"BF-PERF-EXT-PUR-{seedToken}-"), cancellationToken);
             if (syntheticBatchCount == 0)
             {
-                output.WriteLine("Warning: Stock allocation is deferred. ProductBatch consumption will not be updated in V2-06B-3B.");
+                output.WriteLine("Warning: Stock allocation is deferred. ProductBatch consumption will not be updated in V2-06B-3C.");
             }
 
             var existingInvoiceNumbers = await _context.Invoices
@@ -221,7 +222,7 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
                         HasAdjustmentRequest = false,
                         CreatedAt = invoice.CreatedAt,
                         CompletedAt = invoice.CompletedAt,
-                        // No stock allocation is created in V2-06B-3B.
+                        // No stock allocation is created in V2-06B-3C.
                     })
                     .ToList();
 
@@ -266,6 +267,89 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
             PrintProgress(output, invoiceResult);
             PrintProgress(output, lineResult);
             return new InvoiceSeedResult(invoiceResult, lineResult);
+        }
+        finally
+        {
+            _context.ChangeTracker.AutoDetectChangesEnabled = previousAutoDetectChanges;
+        }
+    }
+
+    public async Task<BlackBoxEventSeedResult> SeedBlackBoxEventsAsync(
+        int seed,
+        ProfileConfig profile,
+        TextWriter output,
+        CancellationToken cancellationToken = default)
+    {
+        var previousAutoDetectChanges = _context.ChangeTracker.AutoDetectChangesEnabled;
+        _context.ChangeTracker.AutoDetectChangesEnabled = false;
+
+        try
+        {
+            var transactionProfile = TransactionProfileConfig.Get(profile.Name);
+            var refs = await LoadSyntheticBlackBoxReferencesAsync(seed, profile, transactionProfile, cancellationToken);
+            var seedToken = SyntheticPreviewGenerator.SeedToken(seed);
+            var messagePrefix = $"Synthetic event BF-PERF-BBX-{seedToken}-";
+
+            var existingMessages = await _context.BlackBoxEvents
+                .AsNoTracking()
+                .Where(evt => evt.Message != null && evt.Message.StartsWith(messagePrefix))
+                .Select(evt => evt.Message!)
+                .ToListAsync(cancellationToken);
+            var existingSet = existingMessages.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var inserted = 0;
+
+            for (var startIndex = 1; startIndex <= transactionProfile.BlackBoxEvents; startIndex += BlackBoxEventBatchSize)
+            {
+                var count = Math.Min(BlackBoxEventBatchSize, transactionProfile.BlackBoxEvents - startIndex + 1);
+                var plan = BlackBoxDataGenerator.Generate(
+                    seed,
+                    transactionProfile,
+                    refs.Products,
+                    refs.Employees,
+                    refs.Devices,
+                    refs.Invoices,
+                    refs.Purchases,
+                    startIndex,
+                    count);
+
+                var entities = plan.Events
+                    .Where(evt => !existingSet.Contains(evt.Message))
+                    .Select(evt => new BlackBoxEvent
+                    {
+                        EmployeeId = evt.EmployeeId,
+                        SessionId = null,
+                        DeviceCode = evt.DeviceCode,
+                        Route = evt.Route,
+                        PageName = evt.PageName,
+                        ActionType = evt.ActionType,
+                        ElementKey = evt.ElementKey,
+                        EntityType = evt.EntityType,
+                        EntityId = evt.EntityId,
+                        Result = evt.Result,
+                        Message = evt.Message,
+                        MetadataJson = evt.MetadataJson,
+                        MetadataTruncated = evt.MetadataTruncated,
+                        IpAddress = evt.IpAddress,
+                        UserAgent = evt.UserAgent,
+                        CreatedAtUtc = evt.CreatedAtUtc
+                    })
+                    .ToList();
+
+                if (entities.Count == 0)
+                {
+                    continue;
+                }
+
+                _context.BlackBoxEvents.AddRange(entities);
+                await _context.SaveChangesAsync(cancellationToken);
+                inserted += entities.Count;
+                _context.ChangeTracker.Clear();
+                output.WriteLine($"BlackBoxEvents batch inserted: {inserted}/{transactionProfile.BlackBoxEvents}");
+            }
+
+            var result = new EntitySeedResult("BlackBoxEvents", transactionProfile.BlackBoxEvents, existingSet.Count, inserted);
+            PrintProgress(output, result);
+            return new BlackBoxEventSeedResult(result);
         }
         finally
         {
@@ -551,6 +635,61 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
         return new SyntheticSalesReferenceSet(products, employees);
     }
 
+    private async Task<SyntheticBlackBoxReferenceSet> LoadSyntheticBlackBoxReferencesAsync(
+        int seed,
+        ProfileConfig profile,
+        TransactionProfileConfig transactionProfile,
+        CancellationToken cancellationToken)
+    {
+        var seedToken = SyntheticPreviewGenerator.SeedToken(seed);
+        var products = await _context.Products
+            .AsNoTracking()
+            .Where(product => product.Barcode.StartsWith($"BF-PERF-{seedToken}-"))
+            .OrderBy(product => product.Barcode)
+            .Select(product => new SyntheticProductRef(product.Id, product.Barcode, product.PriceUsd, product.HasExpiry))
+            .ToListAsync(cancellationToken);
+
+        var employees = await _context.Employees
+            .AsNoTracking()
+            .Where(employee => employee.Username.EndsWith($".{seedToken}@example.test"))
+            .OrderBy(employee => employee.Username)
+            .Select(employee => new SyntheticEmployeeRef(employee.Id, employee.Username))
+            .ToListAsync(cancellationToken);
+
+        var devices = await _context.PosDevices
+            .AsNoTracking()
+            .Where(device => device.DeviceCode.StartsWith($"BF-PERF-DEV-{seedToken}-"))
+            .OrderBy(device => device.DeviceCode)
+            .Select(device => new SyntheticDeviceRef(device.Id, device.DeviceCode))
+            .ToListAsync(cancellationToken);
+
+        if (products.Count < profile.Products || employees.Count < profile.Employees || devices.Count < profile.Devices)
+        {
+            throw new InvalidOperationException("Run core reference data generation first.");
+        }
+
+        var invoices = await _context.Invoices
+            .AsNoTracking()
+            .Where(invoice => invoice.InvoiceNumber.StartsWith($"BF-PERF-INV-{seedToken}-"))
+            .OrderBy(invoice => invoice.InvoiceNumber)
+            .Select(invoice => new SyntheticInvoiceRef(invoice.Id, invoice.InvoiceNumber, invoice.CreatedAt, invoice.CompletedAt))
+            .ToListAsync(cancellationToken);
+
+        var purchases = await _context.PurchaseInvoices
+            .AsNoTracking()
+            .Where(invoice => invoice.InvoiceNumber.StartsWith($"BF-PERF-PUR-{seedToken}-"))
+            .OrderBy(invoice => invoice.InvoiceNumber)
+            .Select(invoice => new SyntheticPurchaseRef(invoice.Id, invoice.InvoiceNumber, invoice.CreatedAt, invoice.CompletedAt))
+            .ToListAsync(cancellationToken);
+
+        if (invoices.Count < transactionProfile.Invoices || purchases.Count < transactionProfile.Purchases)
+        {
+            throw new InvalidOperationException("Run transactional generation first.");
+        }
+
+        return new SyntheticBlackBoxReferenceSet(products, employees, devices, invoices, purchases);
+    }
+
     private sealed record SyntheticReferenceSet(
         IReadOnlyList<SyntheticProductRef> Products,
         IReadOnlyList<SyntheticSupplierRef> Suppliers,
@@ -559,4 +698,11 @@ public sealed class EfReferenceDataWriter : IReferenceDataWriter
     private sealed record SyntheticSalesReferenceSet(
         IReadOnlyList<SyntheticProductRef> Products,
         IReadOnlyList<SyntheticEmployeeRef> Employees);
+
+    private sealed record SyntheticBlackBoxReferenceSet(
+        IReadOnlyList<SyntheticProductRef> Products,
+        IReadOnlyList<SyntheticEmployeeRef> Employees,
+        IReadOnlyList<SyntheticDeviceRef> Devices,
+        IReadOnlyList<SyntheticInvoiceRef> Invoices,
+        IReadOnlyList<SyntheticPurchaseRef> Purchases);
 }

@@ -6,7 +6,7 @@ Synthetic performance dataset seeding lives in:
 backend/tools/BazarFlow.PerformanceSeeder
 ```
 
-`V2-06B-3B` supports safety validation, DB-free dry-run previews, insert-only core reference data writes, and opt-in purchase/product batch plus sales invoice seeding with `--include-transactions`. It does not reset data.
+`V2-06B-3C` supports safety validation, DB-free dry-run previews, insert-only core reference data writes, and opt-in purchase/product batch, sales invoice, and BlackBox event seeding with `--include-transactions`. It does not reset data.
 
 Example:
 
@@ -26,7 +26,7 @@ Transactional write mode:
 dotnet run --project backend/tools/BazarFlow.PerformanceSeeder -- --profile small --connection "Server=.;Database=BazarFlowPerformance;Trusted_Connection=True;TrustServerCertificate=True" --seed 12345 --confirm --include-transactions
 ```
 
-V2-06B-3B does not create blackbox events, audit logs, invoice line batch allocations, or stock consumption.
+V2-06B-3C creates synthetic BlackBox events only when `--include-transactions` is passed. It does not create cash sessions, audit logs, invoice line batch allocations, or stock consumption.
 
 Safety rules:
 

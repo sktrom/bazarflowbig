@@ -7,4 +7,6 @@ public interface IReferenceDataWriter : IAsyncDisposable
     Task<PurchaseSeedResult> SeedPurchasesAsync(int seed, ProfileConfig profile, TextWriter output, CancellationToken cancellationToken = default);
 
     Task<InvoiceSeedResult> SeedInvoicesAsync(int seed, ProfileConfig profile, TextWriter output, CancellationToken cancellationToken = default);
+
+    Task<BlackBoxEventSeedResult> SeedBlackBoxEventsAsync(int seed, ProfileConfig profile, TextWriter output, CancellationToken cancellationToken = default);
 }

@@ -179,6 +179,79 @@ public class PerformanceSeederReferenceDataWriterTests
         Assert.Equal(1, await db.Invoices.CountAsync(invoice => invoice.InvoiceNumber == "REAL-INV-1"));
     }
 
+    [Fact]
+    public async Task SeedBlackBoxEventsAsync_RefusesWhenCoreReferencesMissing()
+    {
+        await using var db = CreateInMemoryDbContext();
+        await using var writer = new EfReferenceDataWriter(db);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => writer.SeedBlackBoxEventsAsync(12345, ProfileConfig.Get("small"), TextWriter.Null));
+
+        Assert.Equal("Run core reference data generation first.", exception.Message);
+    }
+
+    [Fact]
+    public async Task SeedBlackBoxEventsAsync_RefusesWhenTransactionsMissing()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => writer.SeedBlackBoxEventsAsync(12345, ProfileConfig.Get("small"), TextWriter.Null));
+
+        Assert.Equal("Run transactional generation first.", exception.Message);
+    }
+
+    [Fact]
+    public async Task SeedBlackBoxEventsAsync_SecondRunDoesNotDuplicateEvents()
+    {
+        await using var db = CreateInMemoryDbContext();
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        var transactionProfile = TransactionProfileConfig.Get("small");
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+        await writer.SeedPurchasesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedInvoicesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedBlackBoxEventsAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedBlackBoxEventsAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+
+        Assert.Equal(
+            transactionProfile.BlackBoxEvents,
+            await db.BlackBoxEvents.CountAsync(evt => evt.Message != null && evt.Message.StartsWith("Synthetic event BF-PERF-BBX-12345-")));
+    }
+
+    [Fact]
+    public async Task SeedBlackBoxEventsAsync_DoesNotModifyNonSyntheticEvents()
+    {
+        await using var db = CreateInMemoryDbContext();
+        db.BlackBoxEvents.Add(new BlackBoxEvent
+        {
+            ActionType = "REAL_ACTION",
+            Result = "Success",
+            Message = "Real event",
+            MetadataJson = "{\"synthetic\":false}",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var referencePlan = ReferenceDataGenerator.Generate(ProfileConfig.Get("small"), 12345);
+        await using var writer = new EfReferenceDataWriter(db);
+
+        await writer.SeedAsync(referencePlan, TextWriter.Null);
+        await writer.SeedPurchasesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedInvoicesAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+        await writer.SeedBlackBoxEventsAsync(12345, ProfileConfig.Get("small"), TextWriter.Null);
+
+        var realEvent = await db.BlackBoxEvents.SingleAsync(evt => evt.Message == "Real event");
+        Assert.Equal("REAL_ACTION", realEvent.ActionType);
+        Assert.Equal(1, await db.BlackBoxEvents.CountAsync(evt => evt.Message == "Real event"));
+    }
+
     private static SupermarketDbContext CreateInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<SupermarketDbContext>()
