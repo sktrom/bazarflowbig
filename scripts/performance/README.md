@@ -16,6 +16,7 @@ Current status:
 - No load test implementation exists here yet.
 - V2-06B-1 seed skeleton exists at `backend/tools/BazarFlow.PerformanceSeeder`; `scripts/performance/seed` documents how to run it.
 - V2-06C diagnostics collector exists at `scripts/performance/diagnostics/bazarflow-db-diagnostics.sql`.
+- V2-06D NBomber smoke tests exist at `scripts/performance/BazarFlow.PerformanceTests`.
 - No orchestration scripts exist here yet.
 
 Safety rules:
